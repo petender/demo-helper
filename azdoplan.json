@@ -1,0 +1,14 @@
+{
+  "title": "Azure DevOps Multi-Stage .NET Build Pipeline",
+  "steps": [
+    {
+      "action": "create_file",
+      "filename": "azure-pipelines.yml",
+      "content": "trigger:\n- main\n\nstages:\n- stage: Dev\n  displayName: 'Build and Test in Dev'\n  jobs:\n  - job: Build\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - task: UseDotNet@2\n      inputs:\n        packageType: 'sdk'\n        version: '7.x'\n    - script: dotnet build --configuration Release\n      displayName: 'Build .NET project'\n    - script: dotnet test --no-build --verbosity normal\n      displayName: 'Run tests'\n\n- stage: Test\n  dependsOn: Dev\n  displayName: 'Deploy to Test'\n  jobs:\n  - job: DeployTest\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - script: echo \"Deploying to Test environment...\"\n      displayName: 'Deploy to Test'\n\n- stage: Staging\n  dependsOn: Test\n  displayName: 'Deploy to Staging'\n  jobs:\n  - job: DeployStaging\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - script: echo \"Deploying to Staging environment...\"\n      displayName: 'Deploy to Staging'\n"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    }
+  ]
+}

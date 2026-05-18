@@ -44,7 +44,7 @@ the very first step followed by a pause.
 
 def plan_demo(description: str) -> dict:
     """Use OpenAI to break a written description into a demo plan."""
-    client = OpenAI(api_key=OPENAI_API_KEY)
+    client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://pdtopenai.openai.azure.com")
 
     response = client.chat.completions.create(
         model="gpt-4o-mini",

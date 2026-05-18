@@ -1,0 +1,23 @@
+{
+  "title": "Create Sales Table and Insert Sample Data",
+  "steps": [
+    {
+      "action": "create_file",
+      "filename": "01_create_sales_table.sql",
+      "content": "IF OBJECT_ID('dbo.Sales', 'U') IS NOT NULL\n    DROP TABLE dbo.Sales;\n\nCREATE TABLE dbo.Sales (\n    SaleID INT IDENTITY(1,1) PRIMARY KEY,\n    SaleDate DATE NOT NULL,\n    ProductName NVARCHAR(100) NOT NULL,\n    Quantity INT NOT NULL,\n    Price MONEY NOT NULL\n);\n\n-- Verify table creation\nSELECT * FROM sys.objects WHERE object_id = OBJECT_ID('dbo.Sales') AND type = 'U';"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "create_file",
+      "filename": "02_insert_sample_sales.sql",
+      "content": "INSERT INTO dbo.Sales (SaleDate, ProductName, Quantity, Price) VALUES\n('2024-01-01', 'Laptop', 5, 1200.00),\n('2024-01-02', 'Smartphone', 10, 800.00),\n('2024-01-03', 'Tablet', 7, 450.00);\n\n-- Verify inserted rows\nSELECT * FROM dbo.Sales;"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    }
+  ]
+}

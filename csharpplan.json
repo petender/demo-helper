@@ -1,0 +1,18 @@
+{
+  "title": "Introduction to Classes, Properties, and Methods in C#",
+  "steps": [
+    {
+      "action": "create_file",
+      "filename": "01_classes.cs",
+      "content": "using System;\n\nclass Person\n{\n    // Property\n    public string Name { get; set; }\n\n    // Method\n    public void SayHello()\n    {\n        Console.WriteLine($\"Hello, my name is {Name}.\");\n    }\n}\n\nclass Program\n{\n    static void Main()\n    {\n        Person person = new Person();\n        person.Name = \"Alice\";\n        person.SayHello();\n    }\n}"
+    },
+    {
+      "action": "run_command",
+      "command": "dotnet run 01_classes.cs"
+    },
+    {
+      "action": "pause",
+      "seconds": 4
+    }
+  ]
+}

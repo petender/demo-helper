@@ -1,7 +1,13 @@
 import time
 from pathlib import Path
+from typing import Callable
 
 import pyautogui
+
+try:
+    import ctypes
+except ImportError:  # pragma: no cover
+    ctypes = None
 
 # Move mouse to any screen corner to abort at any time.
 pyautogui.FAILSAFE = True
@@ -13,11 +19,24 @@ DEFAULT_LINE_DELAY = 0.30   # extra pause after each newline
 DEFAULT_COUNTDOWN = 5        # seconds before playback starts
 
 
+def _is_escape_pressed() -> bool:
+    if ctypes is None:
+        return False
+    # High-order bit indicates key is currently down.
+    return bool(ctypes.windll.user32.GetAsyncKeyState(0x1B) & 0x8000)
+
+
+def _check_abort() -> None:
+    if _is_escape_pressed():
+        raise KeyboardInterrupt("Playback aborted by ESC key")
+
+
 def play_demo(
     plan: dict,
     char_delay: float = DEFAULT_CHAR_DELAY,
     line_delay: float = DEFAULT_LINE_DELAY,
     countdown: int = DEFAULT_COUNTDOWN,
+    pre_step_hook: Callable[[], None] | None = None,
 ) -> None:
     """Execute a demo plan by simulating typing in VS Code."""
     title = plan.get("title", "Untitled")
@@ -26,14 +45,18 @@ def play_demo(
     print(f"\nDemo: {title}")
     print(f"Steps: {len(steps)}")
     print(f"\nSwitch to VS Code now!  Starting in {countdown} seconds...")
-    print("(Move mouse to any screen corner to abort)\n")
+    print("(Press ESC or move mouse to any screen corner to abort)\n")
 
     for i in range(countdown, 0, -1):
+        _check_abort()
         print(f"  {i}...")
         time.sleep(1)
     print("  Go!\n")
 
     for idx, step in enumerate(steps, 1):
+        _check_abort()
+        if pre_step_hook:
+            pre_step_hook()
         action = step["action"]
         if action == "create_file":
             print(f"[{idx}/{len(steps)}] create_file  {step['filename']}")
@@ -59,7 +82,9 @@ def _type_text(text: str, char_delay: float, line_delay: float) -> None:
     """Type *text* character-by-character into the focused VS Code editor."""
     lines = text.split("\n")
     for i, line in enumerate(lines):
+        _check_abort()
         for ch in line:
+            _check_abort()
             if ch == "\t":
                 pyautogui.press("tab")
             else:
@@ -92,23 +117,45 @@ def _create_file(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
 
+    # Quick Open works best with forward slashes for nested relative paths.
+    quick_open_path = str(path).replace("\\", "/")
+
     # Give the file-watcher time to index the new file
     time.sleep(0.4)
 
-    # Open the file via Quick Open (Ctrl+P)
-    pyautogui.hotkey("ctrl", "p")
-    time.sleep(0.6)
-    pyautogui.write(path.name, interval=0.03)
-    time.sleep(0.5)
-    pyautogui.press("enter")
-    time.sleep(0.8)
+    for _attempt in range(2):
+        # Open the file via Quick Open (Ctrl+P)
+        pyautogui.hotkey("ctrl", "p")
+        time.sleep(0.6)
+        pyautogui.write(quick_open_path, interval=0.03)
+        time.sleep(0.5)
+        pyautogui.press("enter")
+        time.sleep(0.8)
 
-    _type_text(content, char_delay, line_delay)
+        # Try to force editor focus and clear existing content.
+        pyautogui.hotkey("ctrl", "1")
+        time.sleep(0.1)
+        pyautogui.hotkey("ctrl", "a")
+        time.sleep(0.05)
+        pyautogui.press("backspace")
+        time.sleep(0.1)
 
-    # Save
-    time.sleep(0.3)
-    pyautogui.hotkey("ctrl", "s")
-    time.sleep(0.5)
+        _type_text(content, char_delay, line_delay)
+
+        # Save
+        time.sleep(0.3)
+        pyautogui.hotkey("ctrl", "s")
+        time.sleep(0.6)
+
+        # Verify content actually made it to disk; retry once if not.
+        try:
+            if path.read_text(encoding="utf-8") == content:
+                return
+        except OSError:
+            pass
+
+    # Final safety net so demos are never left with empty files.
+    path.write_text(content, encoding="utf-8")
 
 
 def _run_command(command: str, char_delay: float) -> None:

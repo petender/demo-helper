@@ -1,0 +1,31 @@
+{
+  "title": "Create Sales and Category Tables with Sample Data",
+  "steps": [
+    {
+      "action": "create_file",
+      "filename": "01_create_category.sql",
+      "content": "IF OBJECT_ID('dbo.Category', 'U') IS NOT NULL\n    DROP TABLE dbo.Category;\nGO\n\nCREATE TABLE dbo.Category (\n    CategoryID INT IDENTITY(1,1) PRIMARY KEY,\n    CategoryName NVARCHAR(100) NOT NULL\n);\n\nINSERT INTO dbo.Category (CategoryName) VALUES\n('Electronics'),\n('Books'),\n('Clothing');\n\nSELECT * FROM dbo.Category;"
+    },
+    {
+      "action": "run_command",
+      "command": "sqlcmd -S localhost -E -d master -i output\\01_create_category.sql"
+    },
+    {
+      "action": "pause",
+      "seconds": 4
+    },
+    {
+      "action": "create_file",
+      "filename": "02_create_sales.sql",
+      "content": "IF OBJECT_ID('dbo.Sales', 'U') IS NOT NULL\n    DROP TABLE dbo.Sales;\nGO\n\nCREATE TABLE dbo.Sales (\n    SaleID INT IDENTITY(1,1) PRIMARY KEY,\n    ProductName NVARCHAR(150) NOT NULL,\n    CategoryID INT NOT NULL FOREIGN KEY REFERENCES dbo.Category(CategoryID),\n    Quantity INT NOT NULL,\n    SaleDate DATE NOT NULL\n);\n\nINSERT INTO dbo.Sales (ProductName, CategoryID, Quantity, SaleDate) VALUES\n('Smartphone', 1, 10, '2024-06-01'),\n('Laptop', 1, 5, '2024-06-02'),\n('Novel Book', 2, 20, '2024-06-03'),\n('T-Shirt', 3, 15, '2024-06-04');\n\nSELECT s.SaleID, s.ProductName, c.CategoryName, s.Quantity, s.SaleDate\nFROM dbo.Sales s\nJOIN dbo.Category c ON s.CategoryID = c.CategoryID;"
+    },
+    {
+      "action": "run_command",
+      "command": "sqlcmd -S localhost -E -d master -i output\\02_create_sales.sql"
+    },
+    {
+      "action": "pause",
+      "seconds": 4
+    }
+  ]
+}

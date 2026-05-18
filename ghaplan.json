@@ -1,0 +1,14 @@
+{
+  "title": "GitHub Actions Node.js CI Build for Staging and Production",
+  "steps": [
+    {
+      "action": "create_file",
+      "filename": ".github/workflows/ci.yml",
+      "content": "name: Node.js CI Build\n\non:\n  push:\n    branches:\n      - staging\n      - production\n\njobs:\n  build:\n    runs-on: ubuntu-latest\n\n    strategy:\n      matrix:\n        node-version: [14.x, 16.x]\n\n    steps:\n      - uses: actions/checkout@v3\n      - name: Use Node.js ${{ matrix.node-version }}\n        uses: actions/setup-node@v3\n        with:\n          node-version: ${{ matrix.node-version }}\n      - name: Install dependencies\n        run: npm install\n      - name: Run build\n        run: npm run build\n      - name: Run tests\n        run: npm test\n"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    }
+  ]
+}

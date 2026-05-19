@@ -182,7 +182,6 @@ def _build_ffmpeg_cmd(
 
 def _start_recording(
     video_file: Path,
-    title_hint: str,
     resolution: str,
     ffmpeg_log_file: Path,
 ) -> subprocess.Popen:
@@ -232,125 +231,6 @@ def _get_primary_desktop_region() -> Tuple[int, int, int, int]:
     return (0, 0, width, height)
 
 
-def _find_vscode_window_region(title_hint: str) -> Tuple[int, int, int, int] | None:
-    user32 = ctypes.windll.user32
-    title_hint_l = title_hint.lower()
-    workspace_hint = title_hint_l.split(" - ", 1)[0]
-    found: dict[str, Tuple[int, int, int, int] | None] = {"region": None}
-
-    enum_proc = ctypes.WINFUNCTYPE(ctypes.c_bool, wintypes.HWND, wintypes.LPARAM)
-
-    @enum_proc
-    def _callback(hwnd: int, lparam: int) -> bool:
-        if not user32.IsWindowVisible(hwnd):
-            return True
-
-        length = user32.GetWindowTextLengthW(hwnd)
-        if length <= 0:
-            return True
-
-        title_buf = ctypes.create_unicode_buffer(length + 1)
-        user32.GetWindowTextW(hwnd, title_buf, length + 1)
-        title = title_buf.value.lower()
-        if "visual studio code" not in title:
-            return True
-        if workspace_hint not in title and title_hint_l not in title:
-            return True
-
-        rect = wintypes.RECT()
-        if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-            return True
-
-        width = rect.right - rect.left
-        height = rect.bottom - rect.top
-        if width < 500 or height < 350:
-            return True
-
-        region = _clamp_region_to_virtual_screen(rect.left, rect.top, width, height)
-        if region is None:
-            return True
-
-        found["region"] = region
-        return False
-
-    for _ in range(12):
-        user32.EnumWindows(_callback, 0)
-        if found["region"] is not None:
-            return found["region"]
-        time.sleep(0.2)
-
-    return None
-
-
-def _find_active_vscode_window_region() -> Tuple[int, int, int, int] | None:
-    user32 = ctypes.windll.user32
-    hwnd = user32.GetForegroundWindow()
-    if not hwnd:
-        return None
-
-    length = user32.GetWindowTextLengthW(hwnd)
-    if length <= 0:
-        return None
-
-    title_buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, title_buf, length + 1)
-    title = title_buf.value.lower()
-    if "visual studio code" not in title:
-        return None
-
-    rect = wintypes.RECT()
-    if not user32.GetWindowRect(hwnd, ctypes.byref(rect)):
-        return None
-
-    width = rect.right - rect.left
-    height = rect.bottom - rect.top
-    if width < 500 or height < 350:
-        return None
-
-    return _clamp_region_to_virtual_screen(rect.left, rect.top, width, height)
-
-
-def _find_active_vscode_monitor_region() -> Tuple[int, int, int, int] | None:
-    user32 = ctypes.windll.user32
-    hwnd = user32.GetForegroundWindow()
-    if not hwnd:
-        return None
-
-    length = user32.GetWindowTextLengthW(hwnd)
-    if length <= 0:
-        return None
-
-    title_buf = ctypes.create_unicode_buffer(length + 1)
-    user32.GetWindowTextW(hwnd, title_buf, length + 1)
-    title = title_buf.value.lower()
-    if "visual studio code" not in title:
-        return None
-
-    MONITOR_DEFAULTTONEAREST = 2
-    monitor = user32.MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST)
-    if not monitor:
-        return None
-
-    class MONITORINFO(ctypes.Structure):
-        _fields_ = [
-            ("cbSize", wintypes.DWORD),
-            ("rcMonitor", wintypes.RECT),
-            ("rcWork", wintypes.RECT),
-            ("dwFlags", wintypes.DWORD),
-        ]
-
-    mi = MONITORINFO()
-    mi.cbSize = ctypes.sizeof(MONITORINFO)
-    if not user32.GetMonitorInfoW(monitor, ctypes.byref(mi)):
-        return None
-
-    x = mi.rcMonitor.left
-    y = mi.rcMonitor.top
-    width = mi.rcMonitor.right - mi.rcMonitor.left
-    height = mi.rcMonitor.bottom - mi.rcMonitor.top
-    return _clamp_region_to_virtual_screen(x, y, width, height)
-
-
 def _position_vscode_on_primary(title_hint: str) -> None:
     hwnd = _find_vscode_window_hwnd(title_hint, strict_workspace=True)
     if hwnd is None:
@@ -370,40 +250,6 @@ def _position_vscode_on_primary(title_hint: str) -> None:
     user32.ShowWindow(hwnd, SW_MAXIMIZE)
 
 
-def _clamp_region_to_virtual_screen(
-    x: int,
-    y: int,
-    width: int,
-    height: int,
-) -> Tuple[int, int, int, int] | None:
-    user32 = ctypes.windll.user32
-    # Virtual desktop metrics (across all monitors)
-    SM_XVIRTUALSCREEN = 76
-    SM_YVIRTUALSCREEN = 77
-    SM_CXVIRTUALSCREEN = 78
-    SM_CYVIRTUALSCREEN = 79
-
-    vx = user32.GetSystemMetrics(SM_XVIRTUALSCREEN)
-    vy = user32.GetSystemMetrics(SM_YVIRTUALSCREEN)
-    vw = user32.GetSystemMetrics(SM_CXVIRTUALSCREEN)
-    vh = user32.GetSystemMetrics(SM_CYVIRTUALSCREEN)
-
-    v_right = vx + vw
-    v_bottom = vy + vh
-    r_right = x + width
-    r_bottom = y + height
-
-    clamped_left = max(x, vx)
-    clamped_top = max(y, vy)
-    clamped_right = min(r_right, v_right)
-    clamped_bottom = min(r_bottom, v_bottom)
-
-    clamped_width = clamped_right - clamped_left
-    clamped_height = clamped_bottom - clamped_top
-    if clamped_width < 300 or clamped_height < 200:
-        return None
-
-    return (clamped_left, clamped_top, clamped_width, clamped_height)
 
 
 def _find_vscode_window_hwnd(title_hint: str, strict_workspace: bool = False) -> int | None:
@@ -644,7 +490,6 @@ def run_recorded_play(
 
         rec_proc = _start_recording(
             recording_file,
-            title_hint=title_hint,
             resolution=resolution,
             ffmpeg_log_file=ffmpeg_log_file,
         )

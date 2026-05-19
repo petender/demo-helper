@@ -284,6 +284,7 @@ What these commands do:
 4. Stop recording immediately after playback
 5. Export video at a fixed output size (default `1920x1280`)
 6. Keep refocusing VS Code during playback to reduce interruptions
+7. Use typing mode by default for animated code demos
 
 ### Record an existing plan
 
@@ -311,6 +312,8 @@ Optional parameters:
 3. `--speed 0.02`
 4. `--format webm`
 5. `--resolution 1920x1280`
+6. `--mode typing` (default)
+7. `--mode stable` (fallback if typing mode is unreliable on your machine)
 
 Stop controls during playback:
 1. Press `Esc` to abort immediately

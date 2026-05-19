@@ -1,10 +1,10 @@
 {
-  "title": "Create Sales Table and Insert Sample Data",
+  "title": "Customer Table with Zipcode and City Lookup Tables",
   "steps": [
     {
       "action": "create_file",
-      "filename": "01_create_sales_table.sql",
-      "content": "IF OBJECT_ID('dbo.Sales', 'U') IS NOT NULL\n    DROP TABLE dbo.Sales;\n\nCREATE TABLE dbo.Sales (\n    SaleID INT IDENTITY(1,1) PRIMARY KEY,\n    SaleDate DATE NOT NULL,\n    ProductName NVARCHAR(100) NOT NULL,\n    Quantity INT NOT NULL,\n    Price MONEY NOT NULL\n);\n\n-- Verify table creation\nSELECT * FROM sys.objects WHERE object_id = OBJECT_ID('dbo.Sales') AND type = 'U';"
+      "filename": "01_create_lookup_tables.sql",
+      "content": "IF OBJECT_ID('dbo.Zipcodes', 'U') IS NOT NULL DROP TABLE dbo.Zipcodes;\nIF OBJECT_ID('dbo.Cities', 'U') IS NOT NULL DROP TABLE dbo.Cities;\n\nCREATE TABLE dbo.Zipcodes (\n    Zipcode CHAR(5) PRIMARY KEY\n);\n\nCREATE TABLE dbo.Cities (\n    CityID INT PRIMARY KEY IDENTITY(1,1),\n    CityName NVARCHAR(100) NOT NULL\n);\n\n-- Insert sample data\nINSERT INTO dbo.Zipcodes (Zipcode) VALUES ('12345'), ('23456'), ('34567');\nINSERT INTO dbo.Cities (CityName) VALUES ('Springfield'), ('Shelbyville'), ('Ogdenville');\n\n-- Verification\nSELECT * FROM dbo.Zipcodes;\nSELECT * FROM dbo.Cities;"
     },
     {
       "action": "pause",
@@ -12,8 +12,26 @@
     },
     {
       "action": "create_file",
-      "filename": "02_insert_sample_sales.sql",
-      "content": "INSERT INTO dbo.Sales (SaleDate, ProductName, Quantity, Price) VALUES\n('2024-01-01', 'Laptop', 5, 1200.00),\n('2024-01-02', 'Smartphone', 10, 800.00),\n('2024-01-03', 'Tablet', 7, 450.00);\n\n-- Verify inserted rows\nSELECT * FROM dbo.Sales;"
+      "filename": "02_create_customer_table.sql",
+      "content": "IF OBJECT_ID('dbo.Customers', 'U') IS NOT NULL DROP TABLE dbo.Customers;\n\nCREATE TABLE dbo.Customers (\n    CustomerID INT PRIMARY KEY IDENTITY(1,1),\n    CustomerName NVARCHAR(100) NOT NULL,\n    Zipcode CHAR(5) NOT NULL,\n    CityID INT NOT NULL,\n    CONSTRAINT FK_Customers_Zipcodes FOREIGN KEY (Zipcode) REFERENCES dbo.Zipcodes(Zipcode),\n    CONSTRAINT FK_Customers_Cities FOREIGN KEY (CityID) REFERENCES dbo.Cities(CityID)\n);\n\n-- Verification\nSELECT * FROM sys.foreign_keys WHERE parent_object_id = OBJECT_ID('dbo.Customers');"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "create_file",
+      "filename": "03_insert_customers.sql",
+      "content": "INSERT INTO dbo.Customers (CustomerName, Zipcode, CityID) VALUES\n('John Doe', '12345', 1),\n('Jane Smith', '23456', 2),\n('Jim Brown', '34567', 3);\n\n-- Verify inserts\nSELECT * FROM dbo.Customers;"
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "create_file",
+      "filename": "04_demo_join.sql",
+      "content": "SELECT c.CustomerID, c.CustomerName, z.Zipcode, ci.CityName\nFROM dbo.Customers c\nJOIN dbo.Zipcodes z ON c.Zipcode = z.Zipcode\nJOIN dbo.Cities ci ON c.CityID = ci.CityID;"
     },
     {
       "action": "pause",

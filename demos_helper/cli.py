@@ -239,6 +239,20 @@ def main():
         help="Output recording resolution WIDTHxHEIGHT (default: 1920x1280)",
     )
     record_play_p.add_argument(
+        "--mode", choices=["stable", "typing"], default="typing",
+        help="Playback mode for recording (default: typing)",
+    )
+    record_play_p.add_argument(
+        "--clean-view",
+        action="store_true",
+        help="Use VS Code keyboard shortcuts to hide panes before recording (off by default)",
+    )
+    record_play_p.add_argument(
+        "--no-focus-lock",
+        action="store_true",
+        help="Do not force VS Code to stay focused during recording",
+    )
+    record_play_p.add_argument(
         "--video-file",
         help="Optional custom output video file path",
     )
@@ -273,6 +287,20 @@ def main():
     record_run_p.add_argument(
         "--resolution", default="1920x1280",
         help="Output recording resolution WIDTHxHEIGHT (default: 1920x1280)",
+    )
+    record_run_p.add_argument(
+        "--mode", choices=["stable", "typing"], default="typing",
+        help="Playback mode for recording (default: typing)",
+    )
+    record_run_p.add_argument(
+        "--clean-view",
+        action="store_true",
+        help="Use VS Code keyboard shortcuts to hide panes before recording (off by default)",
+    )
+    record_run_p.add_argument(
+        "--no-focus-lock",
+        action="store_true",
+        help="Do not force VS Code to stay focused during recording",
     )
     record_run_p.add_argument(
         "--video-file",
@@ -413,6 +441,9 @@ def main():
             countdown=args.countdown,
             video_format=args.format,
             resolution=args.resolution,
+            mode=args.mode,
+            clean_view=args.clean_view,
+            focus_lock=not args.no_focus_lock,
             video_file=args.video_file,
         )
         print(f"Playback workspace: {workspace_dir}")
@@ -426,6 +457,9 @@ def main():
             countdown=args.countdown,
             video_format=args.format,
             resolution=args.resolution,
+            mode=args.mode,
+            clean_view=args.clean_view,
+            focus_lock=not args.no_focus_lock,
             plan_path=args.plan_file,
             video_file=args.video_file,
         )

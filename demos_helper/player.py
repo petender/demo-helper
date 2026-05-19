@@ -1,6 +1,8 @@
 import time
 from pathlib import Path
 from typing import Callable
+import shutil
+import subprocess
 
 import pyautogui
 
@@ -117,14 +119,19 @@ def _create_file(
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
 
-    # Quick Open works best with forward slashes for nested relative paths.
-    quick_open_path = str(path).replace("\\", "/")
-
-    # Give the file-watcher time to index the new file
-    time.sleep(0.4)
-
-    for _attempt in range(2):
-        # Open the file via Quick Open (Ctrl+P)
+    # Open file without Ctrl-based shortcuts when possible.
+    code_path = shutil.which("code")
+    if code_path:
+        subprocess.run(
+            [code_path, "-r", "-g", f"{path}:1"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        time.sleep(0.8)
+    else:
+        # Fallback to Quick Open if VS Code CLI is not available.
+        quick_open_path = str(path).replace("\\", "/")
         pyautogui.hotkey("ctrl", "p")
         time.sleep(0.6)
         pyautogui.write(quick_open_path, interval=0.03)
@@ -132,22 +139,11 @@ def _create_file(
         pyautogui.press("enter")
         time.sleep(0.8)
 
-        # Try to force editor focus and clear existing content.
-        pyautogui.hotkey("ctrl", "1")
-        time.sleep(0.1)
-        pyautogui.hotkey("ctrl", "a")
-        time.sleep(0.05)
-        pyautogui.press("backspace")
-        time.sleep(0.1)
+    _type_text(content, char_delay, line_delay)
 
-        _type_text(content, char_delay, line_delay)
-
-        # Save
-        time.sleep(0.3)
-        pyautogui.hotkey("ctrl", "s")
-        time.sleep(0.6)
-
-        # Verify content actually made it to disk; retry once if not.
+    # Autosave may not flush immediately; poll briefly before fallback write.
+    for _ in range(6):
+        time.sleep(0.35)
         try:
             if path.read_text(encoding="utf-8") == content:
                 return
@@ -160,8 +156,12 @@ def _create_file(
 
 def _run_command(command: str, char_delay: float) -> None:
     """Focus the integrated terminal and execute *command*."""
-    # Ctrl+` toggles / focuses the integrated terminal
-    pyautogui.hotkey("ctrl", "`")
+    # Prefer command palette route to avoid Ctrl-based global shortcut conflicts.
+    pyautogui.press("f1")
+    time.sleep(0.25)
+    pyautogui.write("Terminal: Focus Terminal", interval=0.01)
+    time.sleep(0.2)
+    pyautogui.press("enter")
     time.sleep(0.5)
 
     _type_text(command, char_delay, line_delay=0)

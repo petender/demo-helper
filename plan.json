@@ -1,70 +1,41 @@
 {
-  "title": "Introduction to Python List Comprehensions",
+  "title": "Python Foundry Agent Snippet Demo",
   "steps": [
     {
       "action": "create_file",
-      "filename": "01_basic_list_comprehension.py",
-      "content": "# Basic list comprehension example\nnumbers = [1, 2, 3, 4, 5]\n# Create a new list with each number squared\nsquares = [x**2 for x in numbers]\nprint(\"Original list:\", numbers)\nprint(\"Squares using list comprehension:\", squares)"
-    },
-    {
-      "action": "run_command",
-      "command": "python 01_basic_list_comprehension.py"
+      "filename": ".env.example",
+      "content": "FOUNDRY_AGENT_ENDPOINT=https://<your-endpoint>/agents\nFOUNDRY_API_KEY=<your-api-key>\nFOUNDRY_AGENT_ID=<your-agent-id>\n"
     },
     {
       "action": "pause",
-      "seconds": 4
+      "seconds": 1
     },
     {
       "action": "create_file",
-      "filename": "02_list_comprehension_with_condition.py",
-      "content": "# List comprehension with a condition (filtering)\nnumbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]\n# Create a list of even numbers only\nevens = [x for x in numbers if x % 2 == 0]\nprint(\"Original list:\", numbers)\nprint(\"Even numbers using list comprehension:\", evens)"
-    },
-    {
-      "action": "run_command",
-      "command": "python 02_list_comprehension_with_condition.py"
+      "filename": "src/config.py",
+      "content": "import os\n\n\ndef get_foundry_config() -> dict:\n    return {\n        \"endpoint\": os.getenv(\"FOUNDRY_AGENT_ENDPOINT\", \"\"),\n        \"api_key\": os.getenv(\"FOUNDRY_API_KEY\", \"\"),\n        \"agent_id\": os.getenv(\"FOUNDRY_AGENT_ID\", \"\"),\n    }\n"
     },
     {
       "action": "pause",
-      "seconds": 4
+      "seconds": 1
     },
     {
       "action": "create_file",
-      "filename": "03_list_comprehension_with_expression.py",
-      "content": "# List comprehension with an expression and condition\nwords = [\"apple\", \"banana\", \"cherry\", \"date\"]\n# Create a list of uppercase words with length > 5\nlong_upper = [word.upper() for word in words if len(word) > 5]\nprint(\"Original words:\", words)\nprint(\"Uppercase words longer than 5 characters:\", long_upper)"
-    },
-    {
-      "action": "run_command",
-      "command": "python 03_list_comprehension_with_expression.py"
+      "filename": "src/foundry_client.py",
+      "content": "import requests\n\n\ndef ask_agent(config: dict, prompt: str) -> dict:\n    url = f\"{config['endpoint'].rstrip('/')}/{config['agent_id']}/invoke\"\n    headers = {\n        \"Content-Type\": \"application/json\",\n        \"x-api-key\": config[\"api_key\"],\n    }\n    response = requests.post(url, headers=headers, json={\"input\": prompt}, timeout=30)\n    response.raise_for_status()\n    return response.json()\n"
     },
     {
       "action": "pause",
-      "seconds": 4
+      "seconds": 1
     },
     {
       "action": "create_file",
-      "filename": "04_nested_list_comprehension.py",
-      "content": "# Nested list comprehension example\nmatrix = [\n    [1, 2, 3],\n    [4, 5, 6],\n    [7, 8, 9]\n]\n# Flatten the matrix into a single list\nflat = [num for row in matrix for num in row]\nprint(\"Original matrix:\", matrix)\nprint(\"Flattened list using nested list comprehension:\", flat)"
-    },
-    {
-      "action": "run_command",
-      "command": "python 04_nested_list_comprehension.py"
+      "filename": "src/main.py",
+      "content": "from dotenv import load_dotenv\n\nfrom config import get_foundry_config\nfrom foundry_client import ask_agent\n\n\nload_dotenv()\nconfig = get_foundry_config()\nresult = ask_agent(config, \"Summarize latest product updates in 3 bullets\")\nprint(result)\n"
     },
     {
       "action": "pause",
-      "seconds": 4
-    },
-    {
-      "action": "create_file",
-      "filename": "05_list_comprehension_vs_loop.py",
-      "content": "# Compare list comprehension with a for loop\nnumbers = [1, 2, 3, 4, 5]\n# Using a for loop\nsquares_loop = []\nfor x in numbers:\n    squares_loop.append(x**2)\n\n# Using list comprehension\nsquares_comp = [x**2 for x in numbers]\n\nprint(\"Squares using for loop:\", squares_loop)\nprint(\"Squares using list comprehension:\", squares_comp)"
-    },
-    {
-      "action": "run_command",
-      "command": "python 05_list_comprehension_vs_loop.py"
-    },
-    {
-      "action": "pause",
-      "seconds": 4
+      "seconds": 2
     }
   ]
 }

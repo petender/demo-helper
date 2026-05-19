@@ -1,5 +1,6 @@
 import json
 import os
+import re
 import shutil
 import subprocess
 import threading
@@ -7,7 +8,7 @@ import time
 import ctypes
 from datetime import datetime
 from pathlib import Path
-from typing import Dict, Tuple
+from typing import Callable, Dict, Tuple
 from ctypes import wintypes
 
 from .csharp_planner import plan_csharp_demo
@@ -56,6 +57,11 @@ def _default_plan_name(scenario: str) -> str:
     return mapping[scenario]
 
 
+def _sanitize_for_filename(name: str) -> str:
+    sanitized = re.sub(r"[^A-Za-z0-9._-]+", "_", name).strip("._")
+    return sanitized or "file"
+
+
 def build_plan_for_scenario(scenario: str, prompt: str) -> Dict:
     if scenario == "python":
         return plan_demo(prompt)
@@ -74,6 +80,7 @@ def build_plan_for_scenario(scenario: str, prompt: str) -> Dict:
 
 
 def save_plan(plan: Dict, plan_file: Path) -> None:
+    plan_file.parent.mkdir(parents=True, exist_ok=True)
     with open(plan_file, "w", encoding="utf-8") as f:
         json.dump(plan, f, indent=2)
 
@@ -95,6 +102,7 @@ def _prepare_demo_workspace(session_dir: Path) -> Path:
         "workbench.startupEditor": "none",
         "workbench.tips.enabled": False,
         "workbench.welcome.enabled": False,
+        "window.zoomLevel": 0,
         "editor.minimap.enabled": False,
         "breadcrumbs.enabled": False,
         "files.autoSave": "afterDelay",
@@ -107,6 +115,12 @@ def _prepare_demo_workspace(session_dir: Path) -> Path:
         json.dump(settings, f, indent=2)
 
     return workspace_dir
+
+
+def _create_session_dir(root: Path) -> Path:
+    session_dir = root / "recordings" / f"session-{_timestamp()}"
+    session_dir.mkdir(parents=True, exist_ok=True)
+    return session_dir
 
 
 def _launch_vscode_window(workspace_dir: Path) -> None:
@@ -232,11 +246,19 @@ def _get_primary_desktop_region() -> Tuple[int, int, int, int]:
 
 
 def _position_vscode_on_primary(title_hint: str) -> None:
-    hwnd = _find_vscode_window_hwnd(title_hint, strict_workspace=True)
+    user32 = ctypes.windll.user32
+
+    hwnd = None
+    # Allow window creation/render latency and only target the demo workspace window.
+    for _ in range(12):
+        hwnd = _find_vscode_window_hwnd(title_hint, strict_workspace=True)
+        if hwnd is not None:
+            break
+        time.sleep(0.2)
+
     if hwnd is None:
         return
 
-    user32 = ctypes.windll.user32
     width = user32.GetSystemMetrics(0)   # SM_CXSCREEN
     height = user32.GetSystemMetrics(1)  # SM_CYSCREEN
 
@@ -248,8 +270,6 @@ def _position_vscode_on_primary(title_hint: str) -> None:
     user32.ShowWindow(hwnd, SW_RESTORE)
     user32.SetWindowPos(hwnd, 0, 0, 0, width, height, SWP_NOZORDER | SWP_SHOWWINDOW)
     user32.ShowWindow(hwnd, SW_MAXIMIZE)
-
-
 
 
 def _find_vscode_window_hwnd(title_hint: str, strict_workspace: bool = False) -> int | None:
@@ -320,9 +340,21 @@ def _close_vscode_window(title_hint: str) -> None:
 
 
 def _activate_vscode_window(title_hint: str) -> None:
+    activated = False
+
+    hwnd = _find_vscode_window_hwnd(title_hint, strict_workspace=True)
+    if hwnd is not None:
+        user32 = ctypes.windll.user32
+        SW_RESTORE = 9
+        user32.ShowWindow(hwnd, SW_RESTORE)
+        user32.BringWindowToTop(hwnd)
+        user32.SetForegroundWindow(hwnd)
+        activated = True
+
     script = (
         "$ws = New-Object -ComObject WScript.Shell; "
-        f"if (-not $ws.AppActivate('{title_hint}')) {{ $null = $ws.AppActivate('Visual Studio Code') }}"
+        f"$ok = $ws.AppActivate('{title_hint}'); "
+        "if (-not $ok) { Start-Sleep -Milliseconds 50; $null = $ws.AppActivate('Visual Studio Code') }"
     )
     subprocess.run(
         ["powershell", "-NoProfile", "-Command", script],
@@ -330,6 +362,10 @@ def _activate_vscode_window(title_hint: str) -> None:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+    # Let focus settle before sending keystrokes for the next step.
+    if activated:
+        time.sleep(0.08)
 
 
 def _prepare_clean_view_shortcuts() -> None:
@@ -439,6 +475,173 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
     print("\nDemo playback complete!")
 
 
+def _run_plan_stable_with_hook(
+    plan: Dict,
+    workspace_dir: Path,
+    title_hint: str,
+    post_step_hook: Callable[[dict, int, int], None] | None = None,
+) -> None:
+    steps = plan.get("steps", [])
+    print(f"\nDemo: {plan.get('title', 'Untitled')}")
+    print(f"Steps: {len(steps)}")
+    print("\nStable mode: deterministic file writes + visual file opening in VS Code")
+
+    output_dir = workspace_dir / "output"
+    output_dir.mkdir(parents=True, exist_ok=True)
+
+    for idx, step in enumerate(steps, 1):
+        _check_abort()
+        _activate_vscode_window(title_hint)
+
+        action = step.get("action")
+        if action == "create_file":
+            rel_name = step["filename"]
+            target = output_dir / rel_name
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_text(step.get("content", ""), encoding="utf-8")
+            print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
+            _open_file_in_vscode(target)
+            time.sleep(1.0)
+        elif action == "run_command":
+            command = step.get("command", "")
+            print(f"[{idx}/{len(steps)}] run_command   {command}")
+            subprocess.run(
+                command,
+                shell=True,
+                cwd=workspace_dir,
+                check=False,
+                stdout=subprocess.DEVNULL,
+                stderr=subprocess.DEVNULL,
+            )
+            time.sleep(0.8)
+        elif action == "pause":
+            secs = int(step.get("seconds", 2))
+            print(f"[{idx}/{len(steps)}] pause         {secs}s")
+            for _ in range(secs):
+                _check_abort()
+                time.sleep(1)
+        else:
+            print(f"[{idx}/{len(steps)}] unknown action '{action}', skipping")
+
+        if post_step_hook:
+            post_step_hook(step, idx, len(steps))
+
+    print("\nDemo playback complete!")
+
+
+def _save_primary_desktop_screenshot(target_file: Path) -> None:
+    import pyautogui
+
+    target_file.parent.mkdir(parents=True, exist_ok=True)
+    image = pyautogui.screenshot()
+    image.save(target_file)
+
+
+def _count_create_file_steps(plan: Dict) -> int:
+    return sum(1 for step in plan.get("steps", []) if step.get("action") == "create_file")
+
+
+def run_screenshot_play(
+    plan: Dict,
+    speed: float,
+    countdown: int,
+    mode: str,
+    clean_view: bool = False,
+    focus_lock: bool = True,
+    session_dir: Path | None = None,
+    artifact_dir: Path | None = None,
+    screenshots_dir: str | None = None,
+    plan_file_name: str | None = None,
+    scenario_name: str | None = None,
+) -> Tuple[Path, Path]:
+    _enable_dpi_awareness()
+
+    root = Path.cwd()
+    if session_dir is None:
+        session_dir = _create_session_dir(root)
+    else:
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+    if artifact_dir is None:
+        artifact_dir = session_dir / (scenario_name or "play")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    save_plan(plan, artifact_dir / (plan_file_name or "plan.json"))
+
+    workspace_dir = _prepare_demo_workspace(session_dir)
+    captures_dir = Path(screenshots_dir) if screenshots_dir else artifact_dir / "screenshots"
+    captures_dir.mkdir(parents=True, exist_ok=True)
+
+    title_hint = f"{workspace_dir.name} - Visual Studio Code"
+    create_file_total = _count_create_file_steps(plan)
+    create_file_index = 0
+
+    def _post_step_hook(step: dict, idx: int, total: int) -> None:
+        nonlocal create_file_index
+        if step.get("action") != "create_file":
+            return
+
+        create_file_index += 1
+        filename = _sanitize_for_filename(step.get("filename", f"step-{idx}"))
+        screenshot_file = captures_dir / f"{create_file_index:02d}_{filename}.png"
+
+        # Keep the active editor visible before taking the screenshot.
+        _activate_vscode_window(title_hint)
+        time.sleep(0.25)
+        _save_primary_desktop_screenshot(screenshot_file)
+        print(
+            f"      screenshot {create_file_index}/{create_file_total}: "
+            f"{screenshot_file.name}"
+        )
+
+    try:
+        _launch_vscode_window(workspace_dir)
+        time.sleep(2.5)
+        _activate_vscode_window(title_hint)
+        _position_vscode_on_primary(title_hint)
+        time.sleep(0.5)
+        if clean_view:
+            _prepare_clean_view_shortcuts()
+
+        previous_cwd = Path.cwd()
+        focus_stop = threading.Event()
+        focus_thread = None
+        if focus_lock:
+            focus_thread = threading.Thread(
+                target=_focus_keeper,
+                args=(focus_stop, title_hint),
+                daemon=True,
+            )
+            focus_thread.start()
+
+        try:
+            os.chdir(workspace_dir)
+            if mode == "typing":
+                play_demo(
+                    plan,
+                    char_delay=speed,
+                    countdown=countdown,
+                    pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
+                    post_step_hook=_post_step_hook,
+                )
+            else:
+                _run_plan_stable_with_hook(
+                    plan,
+                    workspace_dir,
+                    title_hint,
+                    post_step_hook=_post_step_hook,
+                )
+        finally:
+            focus_stop.set()
+            if focus_thread is not None:
+                focus_thread.join(timeout=1)
+            os.chdir(previous_cwd)
+    finally:
+        _close_vscode_window(title_hint)
+
+    return workspace_dir, captures_dir
+
+
 def _stop_recording(proc: subprocess.Popen) -> None:
     if proc.poll() is not None:
         return
@@ -465,18 +668,31 @@ def run_recorded_play(
     mode: str,
     clean_view: bool = False,
     focus_lock: bool = True,
+    session_dir: Path | None = None,
+    artifact_dir: Path | None = None,
     video_file: str | None = None,
+    plan_file_name: str | None = None,
+    scenario_name: str | None = None,
 ) -> Tuple[Path, Path]:
     _enable_dpi_awareness()
 
     root = Path.cwd()
-    session_dir = root / "recordings" / f"session-{_timestamp()}"
-    session_dir.mkdir(parents=True, exist_ok=True)
+    if session_dir is None:
+        session_dir = _create_session_dir(root)
+    else:
+        session_dir.mkdir(parents=True, exist_ok=True)
+
+    if artifact_dir is None:
+        artifact_dir = session_dir / (scenario_name or "play")
+    artifact_dir.mkdir(parents=True, exist_ok=True)
+
+    save_plan(plan, artifact_dir / (plan_file_name or "plan.json"))
+
     workspace_dir = _prepare_demo_workspace(session_dir)
 
     suffix = ".mp4" if video_format == "mp4" else ".webm"
-    recording_file = Path(video_file) if video_file else session_dir / f"playback-{_timestamp()}{suffix}"
-    ffmpeg_log_file = session_dir / "ffmpeg.log"
+    recording_file = Path(video_file) if video_file else artifact_dir / f"playback-{_timestamp()}{suffix}"
+    ffmpeg_log_file = artifact_dir / "ffmpeg.log"
 
     title_hint = f"{workspace_dir.name} - Visual Studio Code"
     try:
@@ -510,7 +726,7 @@ def run_recorded_play(
                     plan,
                     char_delay=speed,
                     countdown=countdown,
-                    pre_step_hook=(lambda: _activate_vscode_window(title_hint)) if focus_lock else None,
+                    pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
                 )
             else:
                 _run_plan_stable(plan, workspace_dir, title_hint)
@@ -547,8 +763,16 @@ def generate_and_record(
 ) -> Tuple[Path, Path, Path]:
     plan = build_plan_for_scenario(scenario, prompt)
 
-    plan_file = Path(plan_path) if plan_path else Path(_default_plan_name(scenario))
+    root = Path.cwd()
+    session_dir = _create_session_dir(root)
+    scenario_dir = session_dir / scenario
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+
+    trace_plan_file = scenario_dir / _default_plan_name(scenario)
+    plan_file = Path(plan_path) if plan_path else trace_plan_file
     save_plan(plan, plan_file)
+    if plan_file != trace_plan_file:
+        save_plan(plan, trace_plan_file)
 
     workspace_dir, recording_file = run_recorded_play(
         plan=plan,
@@ -559,6 +783,46 @@ def generate_and_record(
         mode=mode,
         clean_view=clean_view,
         focus_lock=focus_lock,
+        session_dir=session_dir,
+        artifact_dir=scenario_dir,
         video_file=video_file,
     )
     return plan_file, workspace_dir, recording_file
+
+
+def generate_and_screenshot(
+    scenario: str,
+    prompt: str,
+    speed: float,
+    countdown: int,
+    mode: str,
+    clean_view: bool = False,
+    focus_lock: bool = True,
+    plan_path: str | None = None,
+    screenshots_dir: str | None = None,
+) -> Tuple[Path, Path, Path]:
+    plan = build_plan_for_scenario(scenario, prompt)
+
+    root = Path.cwd()
+    session_dir = _create_session_dir(root)
+    scenario_dir = session_dir / scenario
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+
+    trace_plan_file = scenario_dir / _default_plan_name(scenario)
+    plan_file = Path(plan_path) if plan_path else trace_plan_file
+    save_plan(plan, plan_file)
+    if plan_file != trace_plan_file:
+        save_plan(plan, trace_plan_file)
+
+    workspace_dir, captures_dir = run_screenshot_play(
+        plan=plan,
+        speed=speed,
+        countdown=countdown,
+        mode=mode,
+        clean_view=clean_view,
+        focus_lock=focus_lock,
+        session_dir=session_dir,
+        artifact_dir=scenario_dir,
+        screenshots_dir=screenshots_dir,
+    )
+    return plan_file, workspace_dir, captures_dir

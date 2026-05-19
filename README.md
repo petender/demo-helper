@@ -10,6 +10,7 @@ This repo supports:
 - Azure DevOps YAML demos
 - GitHub Actions YAML demos
 - Primary-monitor MP4/WebM recording
+- Primary-monitor screenshot capture (one image per `create_file` step)
 
 ## Recommended Usage: Agentic (Chat-First)
 
@@ -78,6 +79,8 @@ Plan file defaults:
 5. `azdoplan.json`
 6. `ghaplan.json`
 
+When using agentic `record-run`, the plan is stored inside the session trace folder by default.
+
 ## Recording Behavior (Current Final)
 
 Recording is optimized for reliability:
@@ -111,17 +114,46 @@ Record existing plan:
 python -m demos_helper.cli record-play <plan-file> --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
 ```
 
+Capture screenshots for an existing plan:
+```powershell
+python -m demos_helper.cli screenshot-play <plan-file> --countdown 8 --no-focus-lock
+```
+
 Generate and record in one command:
 ```powershell
 python -m demos_helper.cli record-run <scenario> "<prompt>" --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
 ```
 
+Generate and capture screenshots in one command:
+```powershell
+python -m demos_helper.cli screenshot-run <scenario> "<prompt>" --countdown 8 --no-focus-lock
+```
+
 ## Output Locations
 
-1. Plans: repo root (or custom path)
-2. Recording sessions: `recordings/session-*/`
-3. Demo workspace files: `recordings/session-*/demo-workspace/output/`
-4. Recorder log: `recordings/session-*/ffmpeg.log`
+1. `record-play` outputs:
+	- Scenario folder: `recordings/session-*/<plan-stem>/`
+	- Plan snapshot: `recordings/session-*/<plan-stem>/<plan-file-name>.json`
+	- Video: `recordings/session-*/<plan-stem>/playback-*.mp4`
+	- Log: `recordings/session-*/<plan-stem>/ffmpeg.log`
+2. `record-run` outputs (recommended trace layout):
+	- Scenario folder: `recordings/session-*/<scenario>/`
+	- Plan: `recordings/session-*/<scenario>/<default-plan-name>.json`
+	- Video: `recordings/session-*/<scenario>/playback-*.mp4`
+	- Log: `recordings/session-*/<scenario>/ffmpeg.log`
+3. `screenshot-play` outputs:
+	- Scenario folder: `recordings/session-*/<plan-stem>/`
+	- Plan snapshot: `recordings/session-*/<plan-stem>/<plan-file-name>.json`
+	- Screenshot folder: `recordings/session-*/<plan-stem>/screenshots/`
+	- Images: `recordings/session-*/<plan-stem>/screenshots/01_<filename>.png`, `02_<filename>.png`, ...
+4. `screenshot-run` outputs:
+	- Scenario folder: `recordings/session-*/<scenario>/`
+	- Plan: `recordings/session-*/<scenario>/<default-plan-name>.json`
+	- Screenshot folder: `recordings/session-*/<scenario>/screenshots/`
+	- Images: one PNG per `create_file` step
+5. Demo workspace files (typed/generated files):
+	- `recordings/session-*/demo-workspace/output/`
+6. If you pass a custom `--plan-file`, that file is saved too, and a session trace copy is still kept under the scenario folder.
 
 ## Troubleshooting
 

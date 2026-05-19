@@ -1,8 +1,8 @@
 import time
-from pathlib import Path
-from typing import Callable
 import shutil
 import subprocess
+from pathlib import Path
+from typing import Callable
 
 import pyautogui
 
@@ -11,14 +11,16 @@ try:
 except ImportError:  # pragma: no cover
     ctypes = None
 
-# Move mouse to any screen corner to abort at any time.
-pyautogui.FAILSAFE = True
+# Keep playback deterministic; ESC remains the abort mechanism.
+pyautogui.FAILSAFE = False
 # Minimal built-in pause; we handle timing ourselves.
 pyautogui.PAUSE = 0.01
 
 DEFAULT_CHAR_DELAY = 0.03   # seconds between characters
 DEFAULT_LINE_DELAY = 0.30   # extra pause after each newline
 DEFAULT_COUNTDOWN = 5        # seconds before playback starts
+
+_quick_open_primed = False
 
 
 def _is_escape_pressed() -> bool:
@@ -33,12 +35,66 @@ def _check_abort() -> None:
         raise KeyboardInterrupt("Playback aborted by ESC key")
 
 
+def _get_foreground_window_title() -> str:
+    if ctypes is None:
+        return ""
+    user32 = ctypes.windll.user32
+    hwnd = user32.GetForegroundWindow()
+    if not hwnd:
+        return ""
+    length = user32.GetWindowTextLengthW(hwnd)
+    if length <= 0:
+        return ""
+    title_buf = ctypes.create_unicode_buffer(length + 1)
+    user32.GetWindowTextW(hwnd, title_buf, length + 1)
+    return title_buf.value
+
+
+def _wait_for_vscode_foreground(timeout_seconds: float = 2.0) -> bool:
+    end = time.time() + timeout_seconds
+    while time.time() < end:
+        _check_abort()
+        title = _get_foreground_window_title().lower()
+        if "visual studio code" in title:
+            return True
+        time.sleep(0.05)
+    return False
+
+
+def _ensure_editor_caret() -> None:
+    # Dismiss any lingering overlays and click into likely editor area.
+    pyautogui.press("escape")
+    time.sleep(0.08)
+    width, height = pyautogui.size()
+    pyautogui.click(int(width * 0.55), int(height * 0.35))
+    time.sleep(0.12)
+    _wait_for_vscode_foreground(timeout_seconds=1.2)
+
+
+def _prime_quick_open_once() -> None:
+    global _quick_open_primed
+    if _quick_open_primed:
+        return
+
+    # Prime command routing so first-step Ctrl+P is reliable.
+    pyautogui.press("escape")
+    time.sleep(0.06)
+    pyautogui.press("escape")
+    time.sleep(0.06)
+    pyautogui.hotkey("ctrl", "p")
+    time.sleep(0.25)
+    pyautogui.press("escape")
+    time.sleep(0.08)
+    _quick_open_primed = True
+
+
 def play_demo(
     plan: dict,
     char_delay: float = DEFAULT_CHAR_DELAY,
     line_delay: float = DEFAULT_LINE_DELAY,
     countdown: int = DEFAULT_COUNTDOWN,
     pre_step_hook: Callable[[], None] | None = None,
+    post_step_hook: Callable[[dict, int, int], None] | None = None,
 ) -> None:
     """Execute a demo plan by simulating typing in VS Code."""
     title = plan.get("title", "Untitled")
@@ -47,7 +103,7 @@ def play_demo(
     print(f"\nDemo: {title}")
     print(f"Steps: {len(steps)}")
     print(f"\nSwitch to VS Code now!  Starting in {countdown} seconds...")
-    print("(Press ESC or move mouse to any screen corner to abort)\n")
+    print("(Press ESC to abort)\n")
 
     for i in range(countdown, 0, -1):
         _check_abort()
@@ -73,6 +129,9 @@ def play_demo(
             time.sleep(secs)
         else:
             print(f"[{idx}/{len(steps)}] unknown action '{action}', skipping")
+
+        if post_step_hook:
+            post_step_hook(step, idx, len(steps))
 
     print("\nDemo playback complete!")
 
@@ -115,42 +174,63 @@ def _create_file(
     line_delay: float,
 ) -> None:
     """Create *filename* in VS Code: new file → auto-type content → save."""
-    path = Path("output") / filename
+    path = (Path.cwd() / "output" / filename).resolve()
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text("", encoding="utf-8")
 
-    # Open file without Ctrl-based shortcuts when possible.
+    # Ensure the demo window is active before creating/opening the file.
+    width, height = pyautogui.size()
+    pyautogui.click(int(width * 0.55), int(height * 0.35))
+    time.sleep(0.15)
+    _wait_for_vscode_foreground(timeout_seconds=1.2)
+
+    # Open file using code CLI to avoid sending global editor shortcuts.
     code_path = shutil.which("code")
-    if code_path:
-        subprocess.run(
-            [code_path, "-r", "-g", f"{path}:1"],
-            check=False,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        time.sleep(0.8)
-    else:
-        # Fallback to Quick Open if VS Code CLI is not available.
-        quick_open_path = str(path).replace("\\", "/")
-        pyautogui.hotkey("ctrl", "p")
-        time.sleep(0.6)
-        pyautogui.write(quick_open_path, interval=0.03)
-        time.sleep(0.5)
-        pyautogui.press("enter")
-        time.sleep(0.8)
+    if not code_path:
+        raise RuntimeError("VS Code CLI 'code' was not found on PATH.")
+    subprocess.run(
+        [code_path, "-r", "-g", f"{path}:1"],
+        check=False,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    time.sleep(0.9)
+
+    # If Quick Open is still active, close it and force focus back to editor.
+    pyautogui.press("escape")
+    time.sleep(0.15)
+    _ensure_editor_caret()
+    time.sleep(0.25)
+    _wait_for_vscode_foreground(timeout_seconds=1.2)
 
     _type_text(content, char_delay, line_delay)
+    pyautogui.hotkey("ctrl", "s")
+    time.sleep(0.15)
 
-    # Autosave may not flush immediately; poll briefly before fallback write.
-    for _ in range(6):
-        time.sleep(0.35)
-        try:
-            if path.read_text(encoding="utf-8") == content:
-                return
-        except OSError:
-            pass
+    def _normalize_for_compare(text: str) -> str:
+        # VS Code may normalize line endings or add a trailing newline.
+        return text.replace("\r\n", "\n").rstrip("\n")
 
-    # Final safety net so demos are never left with empty files.
+    # Autosave may not flush immediately; if it does not, retry typing once in-editor.
+    for attempt in range(2):
+        for _ in range(6):
+            time.sleep(0.35)
+            try:
+                if _normalize_for_compare(path.read_text(encoding="utf-8")) == _normalize_for_compare(content):
+                    return
+            except OSError:
+                pass
+
+        if attempt == 0:
+            # Keep behavior visible: refocus editor, clear file, and retype once.
+            _ensure_editor_caret()
+            pyautogui.hotkey("ctrl", "a")
+            time.sleep(0.08)
+            pyautogui.press("delete")
+            time.sleep(0.12)
+            _type_text(content, char_delay, line_delay)
+
+    # Keep the run alive for recording reliability if VS Code post-processing changed text.
     path.write_text(content, encoding="utf-8")
 
 

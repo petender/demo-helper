@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from pathlib import Path
 
 try:
     from .agent_experience import launch_agent_gui
@@ -10,7 +11,12 @@ from .csharp_planner import plan_csharp_demo
 from .planner import plan_demo
 from .pipeline_planner import plan_pipeline_demo
 from .player import play_demo
-from .recording_runner import generate_and_record, run_recorded_play
+from .recording_runner import (
+    generate_and_record,
+    generate_and_screenshot,
+    run_recorded_play,
+    run_screenshot_play,
+)
 from .sql_planner import plan_sql_demo
 
 
@@ -307,6 +313,81 @@ def main():
         help="Optional custom output video file path",
     )
 
+    # ── screenshot-play ──────────────────────────────────────────────
+    screenshot_play_p = sub.add_parser(
+        "screenshot-play",
+        help="Open clean VS Code window, play a plan, and capture one screenshot per create_file step",
+    )
+    screenshot_play_p.add_argument("plan_file", help="Path to an existing plan JSON file")
+    screenshot_play_p.add_argument(
+        "--speed", type=float, default=0.03,
+        help="Seconds between characters (default: 0.03)",
+    )
+    screenshot_play_p.add_argument(
+        "--countdown", type=int, default=8,
+        help="Seconds before playback starts (default: 8)",
+    )
+    screenshot_play_p.add_argument(
+        "--mode", choices=["stable", "typing"], default="typing",
+        help="Playback mode for screenshot capture (default: typing)",
+    )
+    screenshot_play_p.add_argument(
+        "--clean-view",
+        action="store_true",
+        help="Use VS Code keyboard shortcuts to hide panes before playback (off by default)",
+    )
+    screenshot_play_p.add_argument(
+        "--no-focus-lock",
+        action="store_true",
+        help="Do not force VS Code to stay focused during playback",
+    )
+    screenshot_play_p.add_argument(
+        "--screenshots-dir",
+        help="Optional custom output directory for screenshots",
+    )
+
+    # ── screenshot-run ───────────────────────────────────────────────
+    screenshot_run_p = sub.add_parser(
+        "screenshot-run",
+        help="Generate plan, open clean VS Code window, play, and capture screenshots in one command",
+    )
+    screenshot_run_p.add_argument(
+        "scenario",
+        choices=["python", "sql", "sql-visual", "csharp", "azdo", "gha"],
+        help="Scenario to generate and capture",
+    )
+    screenshot_run_p.add_argument("prompt", help="Prompt to generate the plan")
+    screenshot_run_p.add_argument(
+        "--plan-file",
+        help="Optional custom output plan path",
+    )
+    screenshot_run_p.add_argument(
+        "--speed", type=float, default=0.03,
+        help="Seconds between characters (default: 0.03)",
+    )
+    screenshot_run_p.add_argument(
+        "--countdown", type=int, default=8,
+        help="Seconds before playback starts (default: 8)",
+    )
+    screenshot_run_p.add_argument(
+        "--mode", choices=["stable", "typing"], default="typing",
+        help="Playback mode for screenshot capture (default: typing)",
+    )
+    screenshot_run_p.add_argument(
+        "--clean-view",
+        action="store_true",
+        help="Use VS Code keyboard shortcuts to hide panes before playback (off by default)",
+    )
+    screenshot_run_p.add_argument(
+        "--no-focus-lock",
+        action="store_true",
+        help="Do not force VS Code to stay focused during playback",
+    )
+    screenshot_run_p.add_argument(
+        "--screenshots-dir",
+        help="Optional custom output directory for screenshots",
+    )
+
     args = parser.parse_args()
 
     if args.command == "plan":
@@ -435,6 +516,9 @@ def main():
         with open(args.plan_file, encoding="utf-8") as f:
             plan = json.load(f)
 
+        plan_path = Path(args.plan_file)
+        scenario_name = plan_path.stem
+
         workspace_dir, recording_file = run_recorded_play(
             plan=plan,
             speed=args.speed,
@@ -445,6 +529,8 @@ def main():
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             video_file=args.video_file,
+            plan_file_name=plan_path.name,
+            scenario_name=scenario_name,
         )
         print(f"Playback workspace: {workspace_dir}")
         print(f"Recording saved to: {recording_file}")
@@ -466,6 +552,43 @@ def main():
         print(f"Plan saved to: {plan_file}")
         print(f"Playback workspace: {workspace_dir}")
         print(f"Recording saved to: {recording_file}")
+
+    elif args.command == "screenshot-play":
+        with open(args.plan_file, encoding="utf-8") as f:
+            plan = json.load(f)
+
+        plan_path = Path(args.plan_file)
+        scenario_name = plan_path.stem
+
+        workspace_dir, captures_dir = run_screenshot_play(
+            plan=plan,
+            speed=args.speed,
+            countdown=args.countdown,
+            mode=args.mode,
+            clean_view=args.clean_view,
+            focus_lock=not args.no_focus_lock,
+            screenshots_dir=args.screenshots_dir,
+            plan_file_name=plan_path.name,
+            scenario_name=scenario_name,
+        )
+        print(f"Playback workspace: {workspace_dir}")
+        print(f"Screenshots saved to: {captures_dir}")
+
+    elif args.command == "screenshot-run":
+        plan_file, workspace_dir, captures_dir = generate_and_screenshot(
+            scenario=args.scenario,
+            prompt=args.prompt,
+            speed=args.speed,
+            countdown=args.countdown,
+            mode=args.mode,
+            clean_view=args.clean_view,
+            focus_lock=not args.no_focus_lock,
+            plan_path=args.plan_file,
+            screenshots_dir=args.screenshots_dir,
+        )
+        print(f"Plan saved to: {plan_file}")
+        print(f"Playback workspace: {workspace_dir}")
+        print(f"Screenshots saved to: {captures_dir}")
 
 
 if __name__ == "__main__":

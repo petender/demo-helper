@@ -1,10 +1,10 @@
 {
-  "title": "Azure DevOps Multi-Stage .NET Build Pipeline",
+  "title": "Azure DevOps Multi-Stage CI Pipeline for Docker",
   "steps": [
     {
       "action": "create_file",
       "filename": "azure-pipelines.yml",
-      "content": "trigger:\n- main\n\nstages:\n- stage: Dev\n  displayName: 'Build and Test in Dev'\n  jobs:\n  - job: Build\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - task: UseDotNet@2\n      inputs:\n        packageType: 'sdk'\n        version: '7.x'\n    - script: dotnet build --configuration Release\n      displayName: 'Build .NET project'\n    - script: dotnet test --no-build --verbosity normal\n      displayName: 'Run tests'\n\n- stage: Test\n  dependsOn: Dev\n  displayName: 'Deploy to Test'\n  jobs:\n  - job: DeployTest\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - script: echo \"Deploying to Test environment...\"\n      displayName: 'Deploy to Test'\n\n- stage: Staging\n  dependsOn: Test\n  displayName: 'Deploy to Staging'\n  jobs:\n  - job: DeployStaging\n    pool:\n      vmImage: 'windows-latest'\n    steps:\n    - script: echo \"Deploying to Staging environment...\"\n      displayName: 'Deploy to Staging'\n"
+      "content": "trigger:\n  branches:\n    include:\n      - main\n\nstages:\n- stage: Build\n  displayName: 'Build Docker Image'\n  jobs:\n  - job: Build\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - task: Docker@2\n      displayName: 'Build Docker Image'\n      inputs:\n        command: build\n        repository: 'myapp'\n        Dockerfile: '**/Dockerfile'\n        tags: |\n          $(Build.BuildId)\n\n- stage: DevDeploy\n  displayName: 'Deploy to Dev'\n  dependsOn: Build\n  jobs:\n  - job: DeployDev\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - script: echo \"Deploying to Development environment\"\n      displayName: 'Deploy to Dev Environment'\n\n- stage: ProdDeploy\n  displayName: 'Deploy to Production'\n  dependsOn: DevDeploy\n  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))\n  jobs:\n  - job: DeployProd\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - script: echo \"Deploying to Production environment\"\n      displayName: 'Deploy to Prod Environment'\n"
     },
     {
       "action": "pause",

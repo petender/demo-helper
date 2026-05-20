@@ -541,6 +541,35 @@ def _count_create_file_steps(plan: Dict) -> int:
     return sum(1 for step in plan.get("steps", []) if step.get("action") == "create_file")
 
 
+def _build_screenshot_post_step_hook(
+    plan: Dict,
+    captures_dir: Path,
+    title_hint: str,
+) -> Callable[[dict, int, int], None]:
+    create_file_total = _count_create_file_steps(plan)
+    create_file_index = 0
+
+    def _post_step_hook(step: dict, idx: int, total: int) -> None:
+        nonlocal create_file_index
+        if step.get("action") != "create_file":
+            return
+
+        create_file_index += 1
+        filename = _sanitize_for_filename(step.get("filename", f"step-{idx}"))
+        screenshot_file = captures_dir / f"{create_file_index:02d}_{filename}.png"
+
+        # Keep the active editor visible before taking the screenshot.
+        _activate_vscode_window(title_hint)
+        time.sleep(0.25)
+        _save_primary_desktop_screenshot(screenshot_file)
+        print(
+            f"      screenshot {create_file_index}/{create_file_total}: "
+            f"{screenshot_file.name}"
+        )
+
+    return _post_step_hook
+
+
 def run_screenshot_play(
     plan: Dict,
     speed: float,
@@ -573,26 +602,11 @@ def run_screenshot_play(
     captures_dir.mkdir(parents=True, exist_ok=True)
 
     title_hint = f"{workspace_dir.name} - Visual Studio Code"
-    create_file_total = _count_create_file_steps(plan)
-    create_file_index = 0
-
-    def _post_step_hook(step: dict, idx: int, total: int) -> None:
-        nonlocal create_file_index
-        if step.get("action") != "create_file":
-            return
-
-        create_file_index += 1
-        filename = _sanitize_for_filename(step.get("filename", f"step-{idx}"))
-        screenshot_file = captures_dir / f"{create_file_index:02d}_{filename}.png"
-
-        # Keep the active editor visible before taking the screenshot.
-        _activate_vscode_window(title_hint)
-        time.sleep(0.25)
-        _save_primary_desktop_screenshot(screenshot_file)
-        print(
-            f"      screenshot {create_file_index}/{create_file_total}: "
-            f"{screenshot_file.name}"
-        )
+    post_step_hook = _build_screenshot_post_step_hook(
+        plan=plan,
+        captures_dir=captures_dir,
+        title_hint=title_hint,
+    )
 
     try:
         _launch_vscode_window(workspace_dir)
@@ -622,14 +636,14 @@ def run_screenshot_play(
                     char_delay=speed,
                     countdown=countdown,
                     pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
-                    post_step_hook=_post_step_hook,
+                    post_step_hook=post_step_hook,
                 )
             else:
                 _run_plan_stable_with_hook(
                     plan,
                     workspace_dir,
                     title_hint,
-                    post_step_hook=_post_step_hook,
+                    post_step_hook=post_step_hook,
                 )
         finally:
             focus_stop.set()
@@ -671,9 +685,11 @@ def run_recorded_play(
     session_dir: Path | None = None,
     artifact_dir: Path | None = None,
     video_file: str | None = None,
+    capture_screenshots: bool = False,
+    screenshots_dir: str | None = None,
     plan_file_name: str | None = None,
     scenario_name: str | None = None,
-) -> Tuple[Path, Path]:
+) -> Tuple[Path, Path, Path | None]:
     _enable_dpi_awareness()
 
     root = Path.cwd()
@@ -693,8 +709,19 @@ def run_recorded_play(
     suffix = ".mp4" if video_format == "mp4" else ".webm"
     recording_file = Path(video_file) if video_file else artifact_dir / f"playback-{_timestamp()}{suffix}"
     ffmpeg_log_file = artifact_dir / "ffmpeg.log"
+    captures_dir: Path | None = None
 
     title_hint = f"{workspace_dir.name} - Visual Studio Code"
+    post_step_hook: Callable[[dict, int, int], None] | None = None
+    if capture_screenshots:
+        captures_dir = Path(screenshots_dir) if screenshots_dir else artifact_dir / "screenshots"
+        captures_dir.mkdir(parents=True, exist_ok=True)
+        post_step_hook = _build_screenshot_post_step_hook(
+            plan=plan,
+            captures_dir=captures_dir,
+            title_hint=title_hint,
+        )
+
     try:
         _launch_vscode_window(workspace_dir)
         time.sleep(2.5)
@@ -727,9 +754,18 @@ def run_recorded_play(
                     char_delay=speed,
                     countdown=countdown,
                     pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
+                    post_step_hook=post_step_hook,
                 )
             else:
-                _run_plan_stable(plan, workspace_dir, title_hint)
+                if post_step_hook:
+                    _run_plan_stable_with_hook(
+                        plan,
+                        workspace_dir,
+                        title_hint,
+                        post_step_hook=post_step_hook,
+                    )
+                else:
+                    _run_plan_stable(plan, workspace_dir, title_hint)
         finally:
             focus_stop.set()
             if focus_thread is not None:
@@ -745,7 +781,7 @@ def run_recorded_play(
             f"Check ffmpeg log: {ffmpeg_log_file}"
         )
 
-    return workspace_dir, recording_file
+    return workspace_dir, recording_file, captures_dir
 
 
 def generate_and_record(
@@ -774,7 +810,7 @@ def generate_and_record(
     if plan_file != trace_plan_file:
         save_plan(plan, trace_plan_file)
 
-    workspace_dir, recording_file = run_recorded_play(
+    workspace_dir, recording_file, _captures_dir = run_recorded_play(
         plan=plan,
         speed=speed,
         countdown=countdown,
@@ -788,6 +824,105 @@ def generate_and_record(
         video_file=video_file,
     )
     return plan_file, workspace_dir, recording_file
+
+
+def run_capture_play(
+    plan: Dict,
+    capture_mode: str,
+    speed: float,
+    countdown: int,
+    video_format: str,
+    resolution: str,
+    mode: str,
+    clean_view: bool = False,
+    focus_lock: bool = True,
+    session_dir: Path | None = None,
+    artifact_dir: Path | None = None,
+    video_file: str | None = None,
+    screenshots_dir: str | None = None,
+    plan_file_name: str | None = None,
+    scenario_name: str | None = None,
+) -> Tuple[Path, Path | None, Path | None]:
+    if capture_mode == "screenshots":
+        workspace_dir, captures_dir = run_screenshot_play(
+            plan=plan,
+            speed=speed,
+            countdown=countdown,
+            mode=mode,
+            clean_view=clean_view,
+            focus_lock=focus_lock,
+            session_dir=session_dir,
+            artifact_dir=artifact_dir,
+            screenshots_dir=screenshots_dir,
+            plan_file_name=plan_file_name,
+            scenario_name=scenario_name,
+        )
+        return workspace_dir, None, captures_dir
+
+    workspace_dir, recording_file, captures_dir = run_recorded_play(
+        plan=plan,
+        speed=speed,
+        countdown=countdown,
+        video_format=video_format,
+        resolution=resolution,
+        mode=mode,
+        clean_view=clean_view,
+        focus_lock=focus_lock,
+        session_dir=session_dir,
+        artifact_dir=artifact_dir,
+        video_file=video_file,
+        capture_screenshots=(capture_mode == "both"),
+        screenshots_dir=screenshots_dir,
+        plan_file_name=plan_file_name,
+        scenario_name=scenario_name,
+    )
+    return workspace_dir, recording_file, captures_dir
+
+
+def generate_and_capture(
+    scenario: str,
+    prompt: str,
+    capture_mode: str,
+    speed: float,
+    countdown: int,
+    video_format: str,
+    resolution: str,
+    mode: str,
+    clean_view: bool = False,
+    focus_lock: bool = True,
+    plan_path: str | None = None,
+    video_file: str | None = None,
+    screenshots_dir: str | None = None,
+) -> Tuple[Path, Path, Path | None, Path | None]:
+    plan = build_plan_for_scenario(scenario, prompt)
+
+    root = Path.cwd()
+    session_dir = _create_session_dir(root)
+    scenario_dir = session_dir / scenario
+    scenario_dir.mkdir(parents=True, exist_ok=True)
+
+    trace_plan_file = scenario_dir / _default_plan_name(scenario)
+    plan_file = Path(plan_path) if plan_path else trace_plan_file
+    save_plan(plan, plan_file)
+    if plan_file != trace_plan_file:
+        save_plan(plan, trace_plan_file)
+
+    workspace_dir, recording_file, captures_dir = run_capture_play(
+        plan=plan,
+        capture_mode=capture_mode,
+        speed=speed,
+        countdown=countdown,
+        video_format=video_format,
+        resolution=resolution,
+        mode=mode,
+        clean_view=clean_view,
+        focus_lock=focus_lock,
+        session_dir=session_dir,
+        artifact_dir=scenario_dir,
+        video_file=video_file,
+        screenshots_dir=screenshots_dir,
+    )
+    return plan_file, workspace_dir, recording_file, captures_dir
 
 
 def generate_and_screenshot(

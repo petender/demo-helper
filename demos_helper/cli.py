@@ -12,8 +12,10 @@ from .planner import plan_demo
 from .pipeline_planner import plan_pipeline_demo
 from .player import play_demo
 from .recording_runner import (
+    generate_and_capture,
     generate_and_record,
     generate_and_screenshot,
+    run_capture_play,
     run_recorded_play,
     run_screenshot_play,
 )
@@ -237,6 +239,10 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_play_p.add_argument(
+        "--capture", choices=["mp4", "screenshots", "both"], default="mp4",
+        help="Capture output type (default: mp4)",
+    )
+    record_play_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
         help="Recording format (default: mp4)",
     )
@@ -261,6 +267,10 @@ def main():
     record_play_p.add_argument(
         "--video-file",
         help="Optional custom output video file path",
+    )
+    record_play_p.add_argument(
+        "--screenshots-dir",
+        help="Optional custom output directory for screenshots",
     )
 
     # ── record-run ───────────────────────────────────────────────────
@@ -287,6 +297,10 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_run_p.add_argument(
+        "--capture", choices=["mp4", "screenshots", "both"], default="mp4",
+        help="Capture output type (default: mp4)",
+    )
+    record_run_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
         help="Recording format (default: mp4)",
     )
@@ -311,6 +325,10 @@ def main():
     record_run_p.add_argument(
         "--video-file",
         help="Optional custom output video file path",
+    )
+    record_run_p.add_argument(
+        "--screenshots-dir",
+        help="Optional custom output directory for screenshots",
     )
 
     # ── screenshot-play ──────────────────────────────────────────────
@@ -519,8 +537,9 @@ def main():
         plan_path = Path(args.plan_file)
         scenario_name = plan_path.stem
 
-        workspace_dir, recording_file = run_recorded_play(
+        workspace_dir, recording_file, captures_dir = run_capture_play(
             plan=plan,
+            capture_mode=args.capture,
             speed=args.speed,
             countdown=args.countdown,
             video_format=args.format,
@@ -529,16 +548,21 @@ def main():
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             video_file=args.video_file,
+            screenshots_dir=args.screenshots_dir,
             plan_file_name=plan_path.name,
             scenario_name=scenario_name,
         )
         print(f"Playback workspace: {workspace_dir}")
-        print(f"Recording saved to: {recording_file}")
+        if recording_file:
+            print(f"Recording saved to: {recording_file}")
+        if captures_dir:
+            print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "record-run":
-        plan_file, workspace_dir, recording_file = generate_and_record(
+        plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
             scenario=args.scenario,
             prompt=args.prompt,
+            capture_mode=args.capture,
             speed=args.speed,
             countdown=args.countdown,
             video_format=args.format,
@@ -548,10 +572,14 @@ def main():
             focus_lock=not args.no_focus_lock,
             plan_path=args.plan_file,
             video_file=args.video_file,
+            screenshots_dir=args.screenshots_dir,
         )
         print(f"Plan saved to: {plan_file}")
         print(f"Playback workspace: {workspace_dir}")
-        print(f"Recording saved to: {recording_file}")
+        if recording_file:
+            print(f"Recording saved to: {recording_file}")
+        if captures_dir:
+            print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "screenshot-play":
         with open(args.plan_file, encoding="utf-8") as f:

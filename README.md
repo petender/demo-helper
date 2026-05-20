@@ -111,7 +111,17 @@ python -m demos_helper.cli play <plan-file>
 
 Record existing plan:
 ```powershell
-python -m demos_helper.cli record-play <plan-file> --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+python -m demos_helper.cli record-play <plan-file> --capture mp4 --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+```
+
+Record existing plan and capture screenshots in the same run:
+```powershell
+python -m demos_helper.cli record-play <plan-file> --capture both --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+```
+
+Capture screenshots only for an existing plan via unified capture mode:
+```powershell
+python -m demos_helper.cli record-play <plan-file> --capture screenshots --countdown 8 --no-focus-lock
 ```
 
 Capture screenshots for an existing plan:
@@ -121,13 +131,28 @@ python -m demos_helper.cli screenshot-play <plan-file> --countdown 8 --no-focus-
 
 Generate and record in one command:
 ```powershell
-python -m demos_helper.cli record-run <scenario> "<prompt>" --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+python -m demos_helper.cli record-run <scenario> "<prompt>" --capture mp4 --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+```
+
+Generate once and output both MP4 and screenshots:
+```powershell
+python -m demos_helper.cli record-run <scenario> "<prompt>" --capture both --format mp4 --countdown 8 --resolution 1920x1280 --no-focus-lock
+```
+
+Generate once and output screenshots only:
+```powershell
+python -m demos_helper.cli record-run <scenario> "<prompt>" --capture screenshots --countdown 8 --no-focus-lock
 ```
 
 Generate and capture screenshots in one command:
 ```powershell
 python -m demos_helper.cli screenshot-run <scenario> "<prompt>" --countdown 8 --no-focus-lock
 ```
+
+`--capture` choices for `record-play` and `record-run`:
+- `mp4`: record video only (default)
+- `screenshots`: capture one PNG per `create_file` step only
+- `both`: record MP4 and capture PNG screenshots in one playback run
 
 ## Output Locations
 
@@ -139,21 +164,27 @@ python -m demos_helper.cli screenshot-run <scenario> "<prompt>" --countdown 8 --
 2. `record-run` outputs (recommended trace layout):
 	- Scenario folder: `recordings/session-*/<scenario>/`
 	- Plan: `recordings/session-*/<scenario>/<default-plan-name>.json`
-	- Video: `recordings/session-*/<scenario>/playback-*.mp4`
+	- Video (when `--capture mp4|both`): `recordings/session-*/<scenario>/playback-*.mp4`
 	- Log: `recordings/session-*/<scenario>/ffmpeg.log`
-3. `screenshot-play` outputs:
+3. `record-run --capture both` outputs:
+	- Scenario folder: `recordings/session-*/<scenario>/`
+	- Plan: `recordings/session-*/<scenario>/<default-plan-name>.json`
+	- Video: `recordings/session-*/<scenario>/playback-*.mp4`
+	- Screenshot folder: `recordings/session-*/<scenario>/screenshots/`
+	- Images: one PNG per `create_file` step
+4. `screenshot-play` outputs:
 	- Scenario folder: `recordings/session-*/<plan-stem>/`
 	- Plan snapshot: `recordings/session-*/<plan-stem>/<plan-file-name>.json`
 	- Screenshot folder: `recordings/session-*/<plan-stem>/screenshots/`
 	- Images: `recordings/session-*/<plan-stem>/screenshots/01_<filename>.png`, `02_<filename>.png`, ...
-4. `screenshot-run` outputs:
+5. `screenshot-run` outputs:
 	- Scenario folder: `recordings/session-*/<scenario>/`
 	- Plan: `recordings/session-*/<scenario>/<default-plan-name>.json`
 	- Screenshot folder: `recordings/session-*/<scenario>/screenshots/`
 	- Images: one PNG per `create_file` step
-5. Demo workspace files (typed/generated files):
+6. Demo workspace files (typed/generated files):
 	- `recordings/session-*/demo-workspace/output/`
-6. If you pass a custom `--plan-file`, that file is saved too, and a session trace copy is still kept under the scenario folder.
+7. If you pass a custom `--plan-file`, that file is saved too, and a session trace copy is still kept under the scenario folder.
 
 ## Troubleshooting
 

@@ -48,9 +48,9 @@ Set-ExecutionPolicy -Scope Process -ExecutionPolicy RemoteSigned
 & .\demos_helper\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
 python -m pip install openai pyautogui python-dotenv runwayml httpx
-Set-Location .\demos_helper\scene-helper
+Set-Location .\scene-helper
 python -m pip install -e .
-Set-Location ..\..
+Set-Location ..
 ```
 
 Create `.env` at repo root:
@@ -72,12 +72,12 @@ The chat agent can run these scenarios end-to-end:
 6. `gha`
 
 Plan file defaults:
-1. `plan.json`
-2. `sqlplan.json`
-3. `sqlplan.visual.json`
-4. `csharpplan.json`
-5. `azdoplan.json`
-6. `ghaplan.json`
+1. `plans/plan.json`
+2. `plans/sqlplan.json`
+3. `plans/sqlplan.visual.json`
+4. `plans/csharpplan.json`
+5. `plans/azdoplan.json`
+6. `plans/ghaplan.json`
 
 When using agentic `record-run`, the plan is stored inside the session trace folder by default.
 
@@ -101,7 +101,7 @@ Use these only if you explicitly want manual execution.
 
 Generate plan:
 ```powershell
-python -m demos_helper.cli <scenario>-plan "<prompt>"
+python -m demos_helper.cli <scenario>-plan "<prompt>" -o plans/<plan-file>.json
 ```
 
 Play plan:

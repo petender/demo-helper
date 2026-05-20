@@ -2,7 +2,7 @@ import json
 
 from openai import OpenAI
 
-from scene_helper.config import OPENAI_API_KEY
+from scene_helper.config import OPENAI_API_KEY, OPENAI_BASE_URL, OPENAI_CHAT_MODEL
 
 SYSTEM_PROMPT = """\
 You are a VS Code demo planner. Given a written description of a topic, \
@@ -44,10 +44,10 @@ the very first step followed by a pause.
 
 def plan_demo(description: str) -> dict:
     """Use OpenAI to break a written description into a demo plan."""
-    client = OpenAI(api_key=OPENAI_API_KEY, base_url="https://pdtopenai.openai.azure.com")
+    client = OpenAI(api_key=OPENAI_API_KEY, base_url=OPENAI_BASE_URL)
 
     response = client.chat.completions.create(
-        model="gpt-4o-mini",
+        model=OPENAI_CHAT_MODEL,
         messages=[
             {"role": "system", "content": SYSTEM_PROMPT},
             {"role": "user", "content": description},

@@ -32,21 +32,21 @@ Guide the user through a chat-first flow:
 
 ## Supported Scenarios
 
-1. Python -> plan.json
-2. SQL -> sqlplan.json
-3. SQL (Visual Only) -> sqlplan.visual.json
-4. C# .NET -> csharpplan.json
-5. Azure DevOps YAML -> azdoplan.json
-6. GitHub Actions YAML -> ghaplan.json
+1. Python -> plans/plan.json
+2. SQL -> plans/sqlplan.json
+3. SQL (Visual Only) -> plans/sqlplan.visual.json
+4. C# .NET -> plans/csharpplan.json
+5. Azure DevOps YAML -> plans/azdoplan.json
+6. GitHub Actions YAML -> plans/ghaplan.json
 
 ## Command Mapping
 
-1. Python: python -m demos_helper.cli plan "<prompt>" -o plan.json
-2. SQL: python -m demos_helper.cli sql-plan "<prompt>" -o sqlplan.json
-3. SQL visual-only: python -m demos_helper.cli sql-plan --visual-only "<prompt>" -o sqlplan.visual.json
-4. C#: python -m demos_helper.cli csharp-plan "<prompt>" -o csharpplan.json
-5. Azure DevOps: python -m demos_helper.cli azdo-plan "<prompt>" -o azdoplan.json
-6. GitHub Actions: python -m demos_helper.cli gha-plan "<prompt>" -o ghaplan.json
+1. Python: python -m demos_helper.cli plan "<prompt>" -o plans/plan.json
+2. SQL: python -m demos_helper.cli sql-plan "<prompt>" -o plans/sqlplan.json
+3. SQL visual-only: python -m demos_helper.cli sql-plan --visual-only "<prompt>" -o plans/sqlplan.visual.json
+4. C#: python -m demos_helper.cli csharp-plan "<prompt>" -o plans/csharpplan.json
+5. Azure DevOps: python -m demos_helper.cli azdo-plan "<prompt>" -o plans/azdoplan.json
+6. GitHub Actions: python -m demos_helper.cli gha-plan "<prompt>" -o plans/ghaplan.json
 7. Playback: python -m demos_helper.cli play "<plan file>"
 
 ## Recording

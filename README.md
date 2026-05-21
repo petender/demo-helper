@@ -81,6 +81,16 @@ Plan file defaults:
 
 When using agentic `record-run`, the plan is stored inside the session trace folder by default.
 
+## Recording Environment
+
+**Before running any playback, recording, or screenshot capture:**
+
+- Close all other applications (Outlook, Teams, browsers, etc.)
+- Dismiss any system notifications or pop-ups
+- Only this VS Code window (where you trigger the agent) should be active on your desktop
+
+This is the same discipline you'd apply to a real human-recorded demo — any foreground window or notification will appear in the capture and can steal focus from the demo VS Code window.
+
 ## Recording Behavior (Current Final)
 
 Recording is optimized for reliability:
@@ -95,16 +105,16 @@ Recommended recording defaults:
 - `--resolution 1920x1280`
 - `--no-focus-lock` when you want to keep using another monitor
 
-## Code Highlights (Screenshot Overlay)
+## Code Highlights (VS Code Extension)
 
-Screenshots can include visual highlights that draw attention to specific lines of code. Highlights are defined per `create_file` step in the plan JSON and rendered as overlays on the captured PNG images using Pillow post-processing.
+Screenshots can include visual highlights that draw attention to specific lines of code. Highlights are defined per `create_file` step in the plan JSON and rendered live in VS Code by the bundled `demo-highlight` extension.
 
 ### How it works
 
 1. Each `create_file` step in a plan can include a `"highlights"` array.
-2. After a screenshot is captured, the overlay engine auto-detects the VS Code editor layout (sidebar boundary, line number positions, line height).
-3. Colored shapes are drawn on the screenshot image at the correct line positions.
-4. The modified PNG is saved in place.
+2. After the file is opened and the editor is active, highlight data is written to `.demo-highlights.json` in the workspace.
+3. The `demo-highlight` VS Code extension reads that file and applies editor decorations (green background + gutter arrows).
+4. The screenshot captures the decorated editor as-is.
 
 ### Highlight schema
 
@@ -122,33 +132,45 @@ Screenshots can include visual highlights that draw attention to specific lines 
 
 Fields:
 - `lines`: `[startLine, endLine]` — 1-based inclusive line range to highlight.
-- `style`: One of `"box"`, `"arrow"`, `"underline"`.
-- `color`: Optional hex color. Supports `#RRGGBB` (auto alpha=170) or `#RRGGBBAA`. Defaults to green `#90EE90` if omitted.
+- `style`: One of `"box"`, `"arrow"`, `"underline"`, `"highlight"`.
+- `color`: Optional hex color (e.g. `#90EE90` or `#90EE9044`). Defaults to green.
 
 ### Available styles
 
 | Style | Effect |
 |-------|--------|
-| `box` | Semi-transparent filled rectangle with solid border around the line range |
-| `arrow` | Arrow pointing from the right margin toward the first highlighted line |
-| `underline` | Thick colored line drawn below the last highlighted line |
+| `box` | Green background fill + solid border around the line range |
+| `arrow` | Green gutter arrow icon + green background on each line |
+| `underline` | Colored bottom border on each line |
+| `highlight` | Background fill only (no border or icon) |
 
 ### Color guidance
 
 - Use green (`#90EE9044` for boxes, `#90EE90` for arrows) as the default — readable on both dark and light themes.
-- Avoid gold/yellow and blue on dark backgrounds (low contrast).
-- The alpha channel (last 2 hex digits) controls transparency: `44` = subtle fill, `AA` = strong fill.
+- The extension passes the color directly to VS Code's decoration API.
 
 ### Where to configure
 
 - **Per-plan**: Edit the `"highlights"` array in your plan JSON file (e.g. `plans/sqlplan.visual.json`).
-- **AI-generated plans**: The SQL planner (`demos_helper/sql_planner.py`) and general planner (`demos_helper/planner.py`) include highlight instructions in their system prompts. The AI will generate highlights for educationally important lines.
-- **Default color fallback**: In `demos_helper/recording_runner.py`, the `_parse_highlight_color()` function defines the fallback when no color is specified.
+- **AI-generated plans**: The SQL planner (`demos_helper/sql_planner.py`) and general planner (`demos_helper/planner.py`) include highlight instructions in their system prompts.
+- **Arrow icon color**: Edit `vscode-demo-highlight/assets/arrow.svg` (currently green `#22C55E`), then rebuild the VSIX.
+- **Extension defaults**: In `vscode-demo-highlight/src/extension.ts`, fallback colors are defined in `createDecorationType()`.
+
+### Extension management
+
+```powershell
+# Rebuild after changing SVG or extension code
+cd vscode-demo-highlight
+npm run compile
+npx @vscode/vsce package --out demo-highlight.vsix
+code --install-extension demo-highlight.vsix --force
+# VS Code must reload window to pick up changes
+```
 
 ### Limitations
 
-- Highlights are applied to **screenshots only** (post-capture PNG processing). They do not appear in MP4 video recordings.
-- Layout auto-detection assumes VS Code is maximized on the primary monitor with default font size. Custom font sizes or split editors may shift alignment.
+- The extension must be installed and VS Code must load it (happens automatically on workspace open).
+- Highlights appear in both screenshots and video recordings (they are live editor decorations).
 - Maximum ~1-3 highlights per file recommended for clarity.
 
 ## Minimal CLI Reference (Fallback)

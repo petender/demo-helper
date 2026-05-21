@@ -164,7 +164,7 @@ function createDecorationType(
           path.join(context.extensionPath, "assets", "arrow.svg")
         ),
         gutterIconSize: "contain",
-        backgroundColor: entry.color || "#FF634722",
+        backgroundColor: entry.color || "#90EE9022",
       });
 
     case "underline":

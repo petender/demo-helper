@@ -18,6 +18,23 @@ from .player import play_demo
 from .sql_planner import plan_sql_demo
 
 
+def _visual_only_plan(plan: Dict) -> tuple[Dict, int]:
+    """Return a copy of plan without run_command steps for capture-safe playback."""
+    steps = plan.get("steps", [])
+    filtered_steps = []
+    skipped = 0
+    for step in steps:
+        if step.get("action") == "run_command":
+            skipped += 1
+            continue
+        filtered_steps.append(step)
+
+    return {
+        "title": plan.get("title", "Untitled"),
+        "steps": filtered_steps,
+    }, skipped
+
+
 def _enable_dpi_awareness() -> None:
     # Align Win32 coordinates with physical pixels used by ffmpeg capture.
     # Try the most modern API first, then progressively older fallbacks.
@@ -193,6 +210,87 @@ def _ensure_preferred_theme_installed() -> None:
         )
     except Exception:
         pass
+
+
+def validate_capture_environment(
+    expected_resolution: str = "1920x1280",
+    require_highlight_extension: bool = False,
+) -> dict:
+    """Validate local machine prerequisites before capture starts."""
+    _enable_dpi_awareness()
+
+    code_ok = shutil.which("code") is not None
+    ffmpeg_ok = shutil.which("ffmpeg") is not None
+
+    # Proactively ensure required extensions are present before checking status.
+    _ensure_preferred_theme_installed()
+    if require_highlight_extension:
+        _install_demo_highlight_extension()
+
+    theme_ext_ok = _is_vscode_extension_installed(_PREFERRED_THEME_EXTENSION_ID)
+    highlight_ext_ok = _is_vscode_extension_installed("demo-helper.demo-highlight")
+
+    try:
+        expected_w, expected_h = expected_resolution.lower().split("x", 1)
+        min_w = int(expected_w)
+        min_h = int(expected_h)
+    except (TypeError, ValueError):
+        min_w, min_h = 1920, 1280
+
+    x, y, screen_w, screen_h = _get_primary_desktop_region()
+    resolution_ok = screen_w >= min_w and screen_h >= min_h
+
+    checks = [
+        {
+            "name": "VS Code CLI available",
+            "passed": code_ok,
+            "detail": "code CLI is on PATH" if code_ok else "Install/configure the `code` CLI",
+        },
+        {
+            "name": "FFmpeg available",
+            "passed": ffmpeg_ok,
+            "detail": "ffmpeg is on PATH" if ffmpeg_ok else "Install/configure ffmpeg on PATH",
+        },
+        {
+            "name": "Primary display resolution",
+            "passed": resolution_ok,
+            "detail": (
+                f"Detected {screen_w}x{screen_h}, target >= {min_w}x{min_h}"
+                if resolution_ok
+                else f"Detected {screen_w}x{screen_h}, target requires >= {min_w}x{min_h}"
+            ),
+        },
+        {
+            "name": "GitHub Light theme extension",
+            "passed": theme_ext_ok,
+            "detail": (
+                "GitHub.github-vscode-theme installed"
+                if theme_ext_ok
+                else "Could not verify GitHub.github-vscode-theme installation"
+            ),
+        },
+    ]
+
+    if require_highlight_extension:
+        checks.append(
+            {
+                "name": "Demo highlight extension",
+                "passed": highlight_ext_ok,
+                "detail": (
+                    "demo-helper.demo-highlight installed"
+                    if highlight_ext_ok
+                    else "Could not verify demo-helper.demo-highlight installation"
+                ),
+            }
+        )
+
+    return {
+        "checks": checks,
+        "all_passed": all(item["passed"] for item in checks),
+        "screen_region": [x, y, screen_w, screen_h],
+        "configured_theme": _PREFERRED_THEME_NAME,
+        "configured_zoom_level": 0.5,
+    }
 
 
 def _prepare_demo_workspace(session_dir: Path) -> Path:
@@ -742,6 +840,7 @@ def _count_create_file_steps(plan: Dict) -> int:
 def _build_screenshot_post_step_hook(
     plan: Dict,
     captures_dir: Path,
+    workspace_dir: Path,
     title_hint: str,
 ) -> Callable[[dict, int, int], None]:
     create_file_total = _count_create_file_steps(plan)
@@ -755,6 +854,12 @@ def _build_screenshot_post_step_hook(
         create_file_index += 1
         filename = _sanitize_for_filename(step.get("filename", f"step-{idx}"))
         screenshot_file = captures_dir / f"{create_file_index:02d}_{filename}.png"
+
+        # Ensure highlights are active before screenshot capture.
+        _apply_step_highlights(workspace_dir, step)
+        time.sleep(0.5)
+        _apply_step_highlights(workspace_dir, step)
+        time.sleep(0.35)
 
         # Keep the active editor visible before taking the screenshot.
         _activate_vscode_window(title_hint)
@@ -794,7 +899,12 @@ def run_screenshot_play(
         artifact_dir = session_dir / (scenario_name or "play")
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    save_plan(plan, artifact_dir / (plan_file_name or "plan.json"))
+    effective_plan, skipped_run_commands = _visual_only_plan(plan)
+    save_plan(effective_plan, artifact_dir / (plan_file_name or "plan.json"))
+    if skipped_run_commands:
+        print(
+            f"Visual capture mode: skipped {skipped_run_commands} run_command step(s)."
+        )
 
     workspace_dir = _prepare_demo_workspace(session_dir)
     captures_dir = Path(screenshots_dir) if screenshots_dir else artifact_dir / "screenshots"
@@ -802,8 +912,9 @@ def run_screenshot_play(
 
     title_hint = f"{workspace_dir.name} - Visual Studio Code"
     post_step_hook = _build_screenshot_post_step_hook(
-        plan=plan,
+        plan=effective_plan,
         captures_dir=captures_dir,
+        workspace_dir=workspace_dir,
         title_hint=title_hint,
     )
 
@@ -831,7 +942,7 @@ def run_screenshot_play(
             os.chdir(workspace_dir)
             if mode == "typing":
                 play_demo(
-                    plan,
+                    effective_plan,
                     char_delay=speed,
                     countdown=countdown,
                     pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
@@ -839,7 +950,7 @@ def run_screenshot_play(
                 )
             else:
                 _run_plan_stable_with_hook(
-                    plan,
+                    effective_plan,
                     workspace_dir,
                     title_hint,
                     post_step_hook=post_step_hook,
@@ -901,7 +1012,12 @@ def run_recorded_play(
         artifact_dir = session_dir / (scenario_name or "play")
     artifact_dir.mkdir(parents=True, exist_ok=True)
 
-    save_plan(plan, artifact_dir / (plan_file_name or "plan.json"))
+    effective_plan, skipped_run_commands = _visual_only_plan(plan)
+    save_plan(effective_plan, artifact_dir / (plan_file_name or "plan.json"))
+    if skipped_run_commands:
+        print(
+            f"Visual capture mode: skipped {skipped_run_commands} run_command step(s)."
+        )
 
     workspace_dir = _prepare_demo_workspace(session_dir)
 
@@ -916,8 +1032,9 @@ def run_recorded_play(
         captures_dir = Path(screenshots_dir) if screenshots_dir else artifact_dir / "screenshots"
         captures_dir.mkdir(parents=True, exist_ok=True)
         post_step_hook = _build_screenshot_post_step_hook(
-            plan=plan,
+            plan=effective_plan,
             captures_dir=captures_dir,
+            workspace_dir=workspace_dir,
             title_hint=title_hint,
         )
 
@@ -949,7 +1066,7 @@ def run_recorded_play(
             os.chdir(workspace_dir)
             if mode == "typing":
                 play_demo(
-                    plan,
+                    effective_plan,
                     char_delay=speed,
                     countdown=countdown,
                     pre_step_hook=(lambda: _activate_vscode_window(title_hint)),
@@ -958,13 +1075,13 @@ def run_recorded_play(
             else:
                 if post_step_hook:
                     _run_plan_stable_with_hook(
-                        plan,
+                        effective_plan,
                         workspace_dir,
                         title_hint,
                         post_step_hook=post_step_hook,
                     )
                 else:
-                    _run_plan_stable(plan, workspace_dir, title_hint)
+                    _run_plan_stable(effective_plan, workspace_dir, title_hint)
         finally:
             focus_stop.set()
             if focus_thread is not None:

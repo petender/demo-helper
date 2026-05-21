@@ -94,3 +94,5 @@ For screenshot mode:
 1. Do not fabricate implementation details not present in the plan/context.
 2. If step details are missing, ask clarifying questions before generating final transcript.
 3. Keep technical claims accurate to the provided code demo scope.
+4. If playback/capture is user-interrupted, do not auto-restart; wait for explicit confirmation.
+5. Assume visual capture workflows prioritize code snippet creation and screenshots over runtime execution.

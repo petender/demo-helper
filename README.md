@@ -25,6 +25,17 @@ How it works:
 
 You do not need to run Python commands manually for normal usage.
 
+## Team Guardrails (Agentic)
+
+These rules are enforced in repository instruction files for shared team behavior:
+
+1. If playback/capture is interrupted by user action (ESC/cancel), do not auto-restart.
+2. Wait for explicit user confirmation before any retry.
+3. Capture workflows prioritize code snippet generation and screenshots.
+4. Do not execute `run_command` plan steps during screenshot/recording capture flows.
+5. Default output mode is `screenshots` unless user explicitly chooses otherwise.
+6. Always communicate that screenshots reliably show highlights while built-in mp4 may not.
+
 ## Prerequisites (Windows)
 
 Required:

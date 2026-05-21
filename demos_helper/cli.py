@@ -19,6 +19,7 @@ from .recording_runner import (
     run_capture_play,
     run_recorded_play,
     run_screenshot_play,
+    validate_capture_environment,
 )
 from .sql_planner import plan_sql_demo
 
@@ -102,6 +103,28 @@ def _confirm_operator_ready(skip_confirmation: bool) -> None:
         raise RuntimeError("Capture cancelled by user before preflight confirmation.")
 
 
+def _run_machine_validation(capture_mode: str, resolution: str) -> None:
+    require_highlight_extension = capture_mode in {"screenshots", "both"}
+    report = validate_capture_environment(
+        expected_resolution=resolution,
+        require_highlight_extension=require_highlight_extension,
+    )
+
+    print("\nMachine validation checks:")
+    for check in report["checks"]:
+        state = "PASS" if check["passed"] else "FAIL"
+        print(f"  [{state}] {check['name']}: {check['detail']}")
+    print(f"  [INFO] Demo workspace theme target: {report['configured_theme']}")
+    print(f"  [INFO] Demo workspace zoom target: {report['configured_zoom_level']} (about 110%)")
+
+    if not report["all_passed"]:
+        raise RuntimeError(
+            "Machine validation failed. Fix the failed checks above and retry."
+        )
+
+    print("Machine validation passed.\n")
+
+
 def _launch_builtin_wizard() -> None:
     print("Starting demo-helper native wizard...")
     print("This fallback works without agent extensions.")
@@ -146,6 +169,7 @@ def _launch_builtin_wizard() -> None:
     )
 
     _print_operator_checklist(capture_mode)
+    _run_machine_validation(capture_mode=capture_mode, resolution=DEFAULT_RESOLUTION)
     _confirm_operator_ready(skip_confirmation=False)
 
     plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
@@ -723,6 +747,7 @@ def main():
             launch_agent_gui()
 
     elif args.command == "record-play":
+        _run_machine_validation(capture_mode=args.capture, resolution=args.resolution)
         _print_operator_checklist(args.capture)
         _confirm_operator_ready(skip_confirmation=args.yes)
 
@@ -754,6 +779,7 @@ def main():
             print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "record-run":
+        _run_machine_validation(capture_mode=args.capture, resolution=args.resolution)
         _print_operator_checklist(args.capture)
         _confirm_operator_ready(skip_confirmation=args.yes)
 
@@ -780,6 +806,7 @@ def main():
             print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "screenshot-play":
+        _run_machine_validation(capture_mode="screenshots", resolution=DEFAULT_RESOLUTION)
         _print_operator_checklist("screenshots")
         _confirm_operator_ready(skip_confirmation=args.yes)
 
@@ -804,6 +831,7 @@ def main():
         print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "screenshot-run":
+        _run_machine_validation(capture_mode="screenshots", resolution=DEFAULT_RESOLUTION)
         _print_operator_checklist("screenshots")
         _confirm_operator_ready(skip_confirmation=args.yes)
 
@@ -826,6 +854,9 @@ def main():
 if __name__ == "__main__":
     try:
         main()
+    except RuntimeError as exc:
+        print(str(exc))
+        sys.exit(1)
     except KeyboardInterrupt:
         print("Playback cancelled by user.")
         sys.exit(130)

@@ -30,6 +30,13 @@ Guide the user through a chat-first flow:
 4. Confirm before playback
 5. Optionally record only playback steps
 
+## Hard Guardrails
+
+1. If playback/capture is interrupted by user action (ESC, cancel, abort), stop immediately.
+2. Never auto-restart after interruption; wait for explicit user confirmation.
+3. During screenshot or recording capture flows, do not execute `run_command` steps.
+4. Capture flows are for code snippet generation and visual artifact creation.
+
 ## Supported Scenarios
 
 1. Python -> recordings/session-<timestamp>/python/plan.json

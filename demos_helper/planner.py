@@ -65,6 +65,29 @@ highlight region (for example open_line: 85).
 APPROVED_HIGHLIGHT_COLOR = "#90EE9044"
 
 
+def _infer_default_highlight_lines(content: str) -> list[int]:
+  lines = content.splitlines()
+  if not lines:
+    return [1, 1]
+
+  first_non_empty = None
+  first_meaningful = None
+  for idx, raw in enumerate(lines, start=1):
+    stripped = raw.strip()
+    if not stripped:
+      continue
+    if first_non_empty is None:
+      first_non_empty = idx
+    if stripped.startswith(("#", "//", "--")):
+      continue
+    first_meaningful = idx
+    break
+
+  start = first_meaningful or first_non_empty or 1
+  end = min(start + 2, max(1, len(lines)))
+  return [start, end]
+
+
 def normalize_plan_highlights(plan: dict) -> dict:
   """Normalize all plan highlights to the approved arrow + light-green style."""
   steps = plan.get("steps", [])
@@ -79,7 +102,7 @@ def normalize_plan_highlights(plan: dict) -> dict:
 
     highlights = step.get("highlights")
     if not isinstance(highlights, list):
-      continue
+      highlights = []
 
     normalized = []
     for entry in highlights:
@@ -108,8 +131,20 @@ def normalize_plan_highlights(plan: dict) -> dict:
 
     if normalized:
       step["highlights"] = normalized
-    else:
-      step.pop("highlights", None)
+      if step.get("open_line") is None:
+        step["open_line"] = normalized[0]["lines"][0]
+      continue
+
+    default_lines = _infer_default_highlight_lines(step.get("content", ""))
+    step["highlights"] = [
+      {
+        "lines": default_lines,
+        "style": "arrow",
+        "color": APPROVED_HIGHLIGHT_COLOR,
+      }
+    ]
+    if step.get("open_line") is None:
+      step["open_line"] = default_lines[0]
 
   return plan
 

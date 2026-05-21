@@ -1,10 +1,63 @@
 {
-  "title": "Azure DevOps Multi-Stage CI Pipeline for Docker",
+  "title": "Azure DevOps Multi-Stage Pipeline for .NET 10 App with Docker and Azure Deployment",
   "steps": [
     {
       "action": "create_file",
       "filename": "azure-pipelines.yml",
-      "content": "trigger:\n  branches:\n    include:\n      - main\n\nstages:\n- stage: Build\n  displayName: 'Build Docker Image'\n  jobs:\n  - job: Build\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - task: Docker@2\n      displayName: 'Build Docker Image'\n      inputs:\n        command: build\n        repository: 'myapp'\n        Dockerfile: '**/Dockerfile'\n        tags: |\n          $(Build.BuildId)\n\n- stage: DevDeploy\n  displayName: 'Deploy to Dev'\n  dependsOn: Build\n  jobs:\n  - job: DeployDev\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - script: echo \"Deploying to Development environment\"\n      displayName: 'Deploy to Dev Environment'\n\n- stage: ProdDeploy\n  displayName: 'Deploy to Production'\n  dependsOn: DevDeploy\n  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/main'))\n  jobs:\n  - job: DeployProd\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - script: echo \"Deploying to Production environment\"\n      displayName: 'Deploy to Prod Environment'\n"
+      "content": "trigger:\n- main\n\nstages:\n- stage: Build\n  displayName: 'Build Stage'\n  jobs:\n  - job: BuildApp\n    displayName: 'Build .NET 10 Application'\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - task: UseDotNet@2\n      inputs:\n        packageType: 'sdk'\n        version: '10.x'\n    - script: |\n        dotnet restore\n        dotnet build --configuration Release\n      displayName: 'Restore and Build'\n\n  - job: BuildDocker\n    displayName: 'Build Docker Image'\n    pool:\n      vmImage: 'ubuntu-latest'\n    steps:\n    - task: Docker@2\n      inputs:\n        containerRegistry: '$(dockerRegistryServiceConnection)'\n        repository: 'mydotnetapp'\n        command: 'build'\n        Dockerfile: 'Dockerfile'\n        tags: 'latest'\n\n- stage: Deploy\n  displayName: 'Deploy Stage'\n  dependsOn: Build\n  jobs:\n  - deployment: DeployWebApp\n    displayName: 'Deploy to Azure App Service'\n    environment: 'production'\n    pool:\n      vmImage: 'ubuntu-latest'\n    strategy:\n      runOnce:\n        deploy:\n          steps:\n          - task: AzureWebApp@1\n            inputs:\n              azureSubscription: '$(azureServiceConnection)'\n              appType: 'webApp'\n              appName: 'my-dotnet10-webapp'\n              package: '$(System.DefaultWorkingDirectory)/_BuildApp/drop'\n\n  - deployment: DeployContainerApp\n    displayName: 'Deploy Docker Container to Azure Container Apps'\n    environment: 'production'\n    pool:\n      vmImage: 'ubuntu-latest'\n    strategy:\n      runOnce:\n        deploy:\n          steps:\n          - task: AzureCLI@2\n            inputs:\n              azureSubscription: '$(azureServiceConnection)'\n              scriptType: 'bash'\n              scriptLocation: 'inlineScript'\n              inlineScript: |\n                az containerapp update --name my-containerapp --resource-group my-resource-group --image $(dockerRegistry)/mydotnetapp:latest\n",
+      "highlights": [
+        {
+          "lines": [
+            7,
+            19
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        },
+        {
+          "lines": [
+            21,
+            33
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        },
+        {
+          "lines": [
+            49,
+            69
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        }
+      ]
+    },
+    {
+      "action": "pause",
+      "seconds": 3
+    },
+    {
+      "action": "create_file",
+      "filename": "Dockerfile",
+      "content": "FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build-env\nWORKDIR /app\n\nCOPY *.csproj ./\nRUN dotnet restore\n\nCOPY . ./\nRUN dotnet publish -c Release -o out\n\nFROM mcr.microsoft.com/dotnet/aspnet:10.0\nWORKDIR /app\nCOPY --from=build-env /app/out ./\nENTRYPOINT [\"dotnet\", \"YourApp.dll\"]\n",
+      "highlights": [
+        {
+          "lines": [
+            1,
+            8
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        },
+        {
+          "lines": [
+            10,
+            13
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        }
+      ]
     },
     {
       "action": "pause",

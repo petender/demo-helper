@@ -102,6 +102,8 @@ def _ensure_tool(name: str) -> str:
 
 _HIGHLIGHTS_FILENAME = ".demo-highlights.json"
 _DEMO_HIGHLIGHT_EXT_DIR = Path(__file__).resolve().parent.parent / "vscode-demo-highlight"
+_PREFERRED_THEME_EXTENSION_ID = "GitHub.github-vscode-theme"
+_PREFERRED_THEME_NAME = "GitHub Light"
 
 
 
@@ -156,6 +158,43 @@ def _install_demo_highlight_extension() -> None:
         pass
 
 
+def _is_vscode_extension_installed(extension_id: str) -> bool:
+    code_path = shutil.which("code")
+    if not code_path:
+        return False
+    try:
+        result = subprocess.run(
+            [code_path, "--list-extensions"],
+            check=False,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+        )
+        if result.returncode != 0:
+            return False
+        installed = {line.strip().lower() for line in result.stdout.splitlines() if line.strip()}
+        return extension_id.lower() in installed
+    except Exception:
+        return False
+
+
+def _ensure_preferred_theme_installed() -> None:
+    code_path = shutil.which("code")
+    if not code_path:
+        return
+    if _is_vscode_extension_installed(_PREFERRED_THEME_EXTENSION_ID):
+        return
+    try:
+        subprocess.run(
+            [code_path, "--install-extension", _PREFERRED_THEME_EXTENSION_ID, "--force"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
 def _prepare_demo_workspace(session_dir: Path) -> Path:
     workspace_dir = session_dir / "demo-workspace"
     settings_dir = workspace_dir / ".vscode"
@@ -166,7 +205,8 @@ def _prepare_demo_workspace(session_dir: Path) -> Path:
         "workbench.startupEditor": "none",
         "workbench.tips.enabled": False,
         "workbench.welcome.enabled": False,
-        "window.zoomLevel": 0,
+        "window.zoomLevel": 0.3,
+        "workbench.colorTheme": _PREFERRED_THEME_NAME,
         "editor.minimap.enabled": False,
         "breadcrumbs.enabled": False,
         "files.autoSave": "afterDelay",
@@ -190,6 +230,7 @@ def _create_session_dir(root: Path) -> Path:
 
 def _launch_vscode_window(workspace_dir: Path) -> None:
     _install_demo_highlight_extension()
+    _ensure_preferred_theme_installed()
     code_path = _ensure_tool("code")
     subprocess.Popen(
         [

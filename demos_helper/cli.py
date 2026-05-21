@@ -118,8 +118,8 @@ def main():
         "description", help="Written description of what to demo",
     )
     plan_p.add_argument(
-        "-o", "--output", default="plans/plan.json",
-        help="Output file for the plan (default: plans/plan.json)",
+        "-o", "--output", default="scenarios/python/plan.json",
+        help="Output file for the plan (default: scenarios/python/plan.json)",
     )
 
     # ── sql-plan ─────────────────────────────────────────────────────
@@ -130,8 +130,8 @@ def main():
         "description", help="Written description of what SQL demo to create",
     )
     sql_plan_p.add_argument(
-        "-o", "--output", default="plans/sqlplan.json",
-        help="Output file for the SQL plan (default: plans/sqlplan.json)",
+        "-o", "--output", default="scenarios/sql/sqlplan.json",
+        help="Output file for the SQL plan (default: scenarios/sql/sqlplan.json)",
     )
     sql_plan_p.add_argument(
         "--visual-only",
@@ -147,8 +147,8 @@ def main():
         "description", help="Written description of what C# demo to create",
     )
     csharp_plan_p.add_argument(
-        "-o", "--output", default="plans/csharpplan.json",
-        help="Output file for the C# plan (default: plans/csharpplan.json)",
+        "-o", "--output", default="scenarios/csharp/csharpplan.json",
+        help="Output file for the C# plan (default: scenarios/csharp/csharpplan.json)",
     )
 
     # ── azdo-plan ────────────────────────────────────────────────────
@@ -159,8 +159,8 @@ def main():
         "description", help="Written description of what Azure DevOps pipeline demo to create",
     )
     azdo_plan_p.add_argument(
-        "-o", "--output", default="plans/azdoplan.json",
-        help="Output file for the Azure DevOps plan (default: plans/azdoplan.json)",
+        "-o", "--output", default="scenarios/azdo/azdoplan.json",
+        help="Output file for the Azure DevOps plan (default: scenarios/azdo/azdoplan.json)",
     )
 
     # ── gha-plan ─────────────────────────────────────────────────────
@@ -171,8 +171,8 @@ def main():
         "description", help="Written description of what GitHub Actions demo to create",
     )
     gha_plan_p.add_argument(
-        "-o", "--output", default="plans/ghaplan.json",
-        help="Output file for the GitHub Actions plan (default: plans/ghaplan.json)",
+        "-o", "--output", default="scenarios/gha/ghaplan.json",
+        help="Output file for the GitHub Actions plan (default: scenarios/gha/ghaplan.json)",
     )
 
     # ── play ─────────────────────────────────────────────────────────
@@ -227,8 +227,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     sql_run_p.add_argument(
-        "--save-plan", default="plans/sqlplan.json",
-        help="Save generated SQL plan to this file (default: plans/sqlplan.json)",
+        "--save-plan", default="scenarios/sql/sqlplan.json",
+        help="Save generated SQL plan to this file (default: scenarios/sql/sqlplan.json)",
     )
     sql_run_p.add_argument(
         "--visual-only",
@@ -252,8 +252,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     csharp_run_p.add_argument(
-        "--save-plan", default="plans/csharpplan.json",
-        help="Save generated C# plan to this file (default: plans/csharpplan.json)",
+        "--save-plan", default="scenarios/csharp/csharpplan.json",
+        help="Save generated C# plan to this file (default: scenarios/csharp/csharpplan.json)",
     )
 
     # ── azdo-run ─────────────────────────────────────────────────────
@@ -272,8 +272,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     azdo_run_p.add_argument(
-        "--save-plan", default="plans/azdoplan.json",
-        help="Save generated Azure DevOps plan to this file (default: plans/azdoplan.json)",
+        "--save-plan", default="scenarios/azdo/azdoplan.json",
+        help="Save generated Azure DevOps plan to this file (default: scenarios/azdo/azdoplan.json)",
     )
 
     # ── gha-run ──────────────────────────────────────────────────────
@@ -292,8 +292,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     gha_run_p.add_argument(
-        "--save-plan", default="plans/ghaplan.json",
-        help="Save generated GitHub Actions plan to this file (default: plans/ghaplan.json)",
+        "--save-plan", default="scenarios/gha/ghaplan.json",
+        help="Save generated GitHub Actions plan to this file (default: scenarios/gha/ghaplan.json)",
     )
 
     # ── agent-ui ─────────────────────────────────────────────────────

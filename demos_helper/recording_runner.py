@@ -100,6 +100,178 @@ _HIGHLIGHTS_FILENAME = ".demo-highlights.json"
 _DEMO_HIGHLIGHT_EXT_DIR = Path(__file__).resolve().parent.parent / "vscode-demo-highlight"
 
 
+def _parse_highlight_color(color_str: str) -> Tuple[int, int, int, int]:
+    """Parse a hex color string like '#FFD700' or '#FFD700AA' into (R, G, B, A)."""
+    c = color_str.lstrip("#")
+    if len(c) == 6:
+        return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16), 170)
+    elif len(c) == 8:
+        return (int(c[0:2], 16), int(c[2:4], 16), int(c[4:6], 16), int(c[6:8], 16))
+    return (255, 215, 0, 170)
+
+
+def _detect_editor_layout(arr) -> Dict:
+    """Auto-detect VS Code editor layout from a screenshot numpy array.
+
+    Returns dict with keys: editor_left, code_left, line_height, first_line_center_y.
+    """
+    import numpy as np
+
+    height, width = arr.shape[:2]
+
+    # Find sidebar/editor boundary by scanning horizontally at ~60% height
+    # (below most sidebar content). Sidebar bg is typically ~30 brightness,
+    # editor bg is ~38. We look for the rightmost transition from <33 to >35.
+    scan_y = int(height * 0.6)
+    row = arr[scan_y, :, :3].astype(float).mean(axis=1)
+
+    editor_left = 0
+    # Scan from center leftward to find where it transitions from editor to sidebar
+    for x in range(width // 2, 50, -1):
+        if row[x] > 35 and row[x - 1] < 33:
+            editor_left = x
+            break
+
+    if editor_left == 0:
+        # Fallback: scan rightward for a sustained region > 35
+        for x in range(100, width // 2):
+            if all(row[x + dx] > 35 for dx in range(30)):
+                editor_left = x
+                break
+
+    # Find line numbers in the gutter (editor_left to editor_left+80).
+    # Line numbers are brighter than the editor background.
+    gutter_left = editor_left
+    gutter_right = min(editor_left + 80, width)
+    gutter_region = arr[50:height // 2, gutter_left:gutter_right, :]
+    row_max_brightness = gutter_region.max(axis=1).max(axis=1)
+
+    # Find groups of rows where brightness exceeds background threshold
+    threshold = 50
+    groups = []
+    in_group = False
+    start = 0
+    for i in range(len(row_max_brightness)):
+        if row_max_brightness[i] > threshold:
+            if not in_group:
+                in_group = True
+                start = i + 50
+        else:
+            if in_group:
+                in_group = False
+                center = (start + i + 50) // 2
+                groups.append(center)
+    if in_group:
+        groups.append((start + len(row_max_brightness) + 50) // 2)
+
+    # Calculate line height from consistent spacing (skip first which may be
+    # the active line with extra highlight)
+    line_height = 33  # default fallback
+    first_line_center = 107  # default fallback
+    if len(groups) >= 3:
+        # Use spacing from group[1] onward for consistency
+        spacings = [groups[i + 1] - groups[i] for i in range(1, len(groups) - 1)]
+        if spacings:
+            line_height = int(round(sum(spacings) / len(spacings)))
+        # First line center estimated from second line number
+        first_line_center = groups[1] - line_height
+    elif len(groups) >= 2:
+        line_height = groups[1] - groups[0]
+        first_line_center = groups[0]
+
+    # Code content starts after line numbers (gutter_right + small gap)
+    code_left = gutter_right + 10
+
+    return {
+        "editor_left": editor_left,
+        "code_left": code_left,
+        "line_height": line_height,
+        "first_line_center_y": first_line_center,
+    }
+
+
+def _apply_highlight_overlay(screenshot_path: Path, highlights: list) -> None:
+    """Draw highlight overlays directly on a screenshot image using Pillow."""
+    if not highlights:
+        return
+
+    from PIL import Image, ImageDraw
+    import numpy as np
+
+    img = Image.open(screenshot_path).convert("RGBA")
+    arr = np.array(img)
+    layout = _detect_editor_layout(arr)
+
+    width = img.width
+    code_left = layout["code_left"]
+    line_height = layout["line_height"]
+    first_center_y = layout["first_line_center_y"]
+    # Highlight extends to 85% of image width
+    code_right = int(width * 0.85)
+
+    # Create transparent overlay for blending
+    overlay = Image.new("RGBA", img.size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(overlay)
+
+    for hl in highlights:
+        lines = hl.get("lines", [])
+        style = hl.get("style", "box")
+        color = _parse_highlight_color(hl.get("color", "#FFD700AA"))
+
+        if not lines:
+            continue
+
+        min_line = min(lines)
+        max_line = max(lines)
+
+        # Calculate Y coordinates for the line range
+        top_y = first_center_y + (min_line - 1) * line_height - line_height // 2
+        bottom_y = first_center_y + (max_line - 1) * line_height + line_height // 2
+
+        if style == "box":
+            # Semi-transparent filled rectangle with a solid border
+            fill_color = (color[0], color[1], color[2], min(color[3], 60))
+            border_color = (color[0], color[1], color[2], min(color[3] + 50, 255))
+            draw.rectangle(
+                [code_left - 5, top_y, code_right, bottom_y],
+                fill=fill_color,
+                outline=border_color,
+                width=3,
+            )
+        elif style == "underline":
+            # Thick colored line below the last specified line
+            line_y = bottom_y + 2
+            line_color = (color[0], color[1], color[2], min(color[3] + 50, 255))
+            draw.line(
+                [code_left - 5, line_y, code_right, line_y],
+                fill=line_color,
+                width=4,
+            )
+        elif style == "arrow":
+            # Arrow pointing to the first line from the right margin
+            arrow_y = first_center_y + (min_line - 1) * line_height
+            arrow_color = (color[0], color[1], color[2], 220)
+            # Arrow body
+            draw.line(
+                [code_right + 20, arrow_y, code_right + 80, arrow_y],
+                fill=arrow_color,
+                width=4,
+            )
+            # Arrowhead
+            draw.polygon(
+                [
+                    (code_right + 5, arrow_y),
+                    (code_right + 20, arrow_y - 8),
+                    (code_right + 20, arrow_y + 8),
+                ],
+                fill=arrow_color,
+            )
+
+    # Composite overlay onto original
+    result = Image.alpha_composite(img, overlay)
+    result.convert("RGB").save(screenshot_path)
+
+
 def _write_highlights(workspace_dir: Path, highlights: list) -> None:
     """Write highlight entries to the workspace so the extension can render them."""
     highlights_file = workspace_dir / _HIGHLIGHTS_FILENAME
@@ -116,7 +288,6 @@ def _apply_step_highlights(workspace_dir: Path, step: dict) -> None:
     highlights = step.get("highlights")
     if highlights:
         _write_highlights(workspace_dir, highlights)
-        time.sleep(0.4)  # Allow extension to render decorations
     else:
         _clear_highlights(workspace_dir)
 
@@ -158,6 +329,7 @@ def _prepare_demo_workspace(session_dir: Path) -> Path:
         "workbench.activityBar.visible": False,
         "workbench.statusBar.visible": False,
         "extensions.ignoreRecommendations": True,
+        "security.workspace.trust.enabled": False,
     }
     with open(settings_dir / "settings.json", "w", encoding="utf-8") as f:
         json.dump(settings, f, indent=2)
@@ -182,6 +354,7 @@ def _launch_vscode_window(workspace_dir: Path) -> None:
             "--maximized",
             "--skip-release-notes",
             "--skip-add-to-recently-opened",
+            "--disable-workspace-trust",
         ],
         shell=False,
         stdout=subprocess.DEVNULL,
@@ -498,9 +671,10 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
-            _open_file_in_vscode(target)
-            time.sleep(1.0)
+            # Write highlights BEFORE opening so extension renders on editor activation
             _apply_step_highlights(workspace_dir, step)
+            _open_file_in_vscode(target)
+            time.sleep(2.0)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
@@ -551,9 +725,10 @@ def _run_plan_stable_with_hook(
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
-            _open_file_in_vscode(target)
-            time.sleep(1.0)
+            # Write highlights BEFORE opening so extension renders on editor activation
             _apply_step_highlights(workspace_dir, step)
+            _open_file_in_vscode(target)
+            time.sleep(2.0)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
@@ -615,6 +790,12 @@ def _build_screenshot_post_step_hook(
         _activate_vscode_window(title_hint)
         time.sleep(0.25)
         _save_primary_desktop_screenshot(screenshot_file)
+
+        # Apply highlight overlays directly on the screenshot image
+        highlights = step.get("highlights")
+        if highlights:
+            _apply_highlight_overlay(screenshot_file, highlights)
+
         print(
             f"      screenshot {create_file_index}/{create_file_total}: "
             f"{screenshot_file.name}"

@@ -95,6 +95,62 @@ Recommended recording defaults:
 - `--resolution 1920x1280`
 - `--no-focus-lock` when you want to keep using another monitor
 
+## Code Highlights (Screenshot Overlay)
+
+Screenshots can include visual highlights that draw attention to specific lines of code. Highlights are defined per `create_file` step in the plan JSON and rendered as overlays on the captured PNG images using Pillow post-processing.
+
+### How it works
+
+1. Each `create_file` step in a plan can include a `"highlights"` array.
+2. After a screenshot is captured, the overlay engine auto-detects the VS Code editor layout (sidebar boundary, line number positions, line height).
+3. Colored shapes are drawn on the screenshot image at the correct line positions.
+4. The modified PNG is saved in place.
+
+### Highlight schema
+
+```json
+{
+  "action": "create_file",
+  "filename": "example.sql",
+  "content": "...",
+  "highlights": [
+    {"lines": [1, 4], "style": "box", "color": "#90EE9044"},
+    {"lines": [6, 6], "style": "arrow", "color": "#90EE90"}
+  ]
+}
+```
+
+Fields:
+- `lines`: `[startLine, endLine]` — 1-based inclusive line range to highlight.
+- `style`: One of `"box"`, `"arrow"`, `"underline"`.
+- `color`: Optional hex color. Supports `#RRGGBB` (auto alpha=170) or `#RRGGBBAA`. Defaults to green `#90EE90` if omitted.
+
+### Available styles
+
+| Style | Effect |
+|-------|--------|
+| `box` | Semi-transparent filled rectangle with solid border around the line range |
+| `arrow` | Arrow pointing from the right margin toward the first highlighted line |
+| `underline` | Thick colored line drawn below the last highlighted line |
+
+### Color guidance
+
+- Use green (`#90EE9044` for boxes, `#90EE90` for arrows) as the default — readable on both dark and light themes.
+- Avoid gold/yellow and blue on dark backgrounds (low contrast).
+- The alpha channel (last 2 hex digits) controls transparency: `44` = subtle fill, `AA` = strong fill.
+
+### Where to configure
+
+- **Per-plan**: Edit the `"highlights"` array in your plan JSON file (e.g. `plans/sqlplan.visual.json`).
+- **AI-generated plans**: The SQL planner (`demos_helper/sql_planner.py`) and general planner (`demos_helper/planner.py`) include highlight instructions in their system prompts. The AI will generate highlights for educationally important lines.
+- **Default color fallback**: In `demos_helper/recording_runner.py`, the `_parse_highlight_color()` function defines the fallback when no color is specified.
+
+### Limitations
+
+- Highlights are applied to **screenshots only** (post-capture PNG processing). They do not appear in MP4 video recordings.
+- Layout auto-detection assumes VS Code is maximized on the primary monitor with default font size. Custom font sizes or split editors may shift alignment.
+- Maximum ~1-3 highlights per file recommended for clarity.
+
 ## Minimal CLI Reference (Fallback)
 
 Use these only if you explicitly want manual execution.

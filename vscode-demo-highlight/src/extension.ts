@@ -3,6 +3,13 @@ import * as path from "path";
 import * as fs from "fs";
 
 const HIGHLIGHTS_FILENAME = ".demo-highlights.json";
+const LOG_FILENAME = ".demo-highlight-log.txt";
+
+function log(workspaceFolder: vscode.WorkspaceFolder, msg: string) {
+  const logPath = path.join(workspaceFolder.uri.fsPath, LOG_FILENAME);
+  const timestamp = new Date().toISOString();
+  fs.appendFileSync(logPath, `[${timestamp}] ${msg}\n`);
+}
 
 interface HighlightEntry {
   lines: [number, number]; // [startLine, endLine] 1-based inclusive
@@ -13,19 +20,41 @@ interface HighlightEntry {
 
 let activeDecorations: vscode.TextEditorDecorationType[] = [];
 let fileWatcher: vscode.FileSystemWatcher | undefined;
+let lastHighlightsContent = "";
 
 export function activate(context: vscode.ExtensionContext) {
-  const pattern = new vscode.RelativePattern(
-    vscode.workspace.workspaceFolders?.[0] ?? "",
-    HIGHLIGHTS_FILENAME
-  );
+  const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
+  if (!workspaceFolder) {
+    // Write log to a fallback location to confirm activation happened
+    const fallback = path.join(context.extensionPath, "activation-no-workspace.log");
+    fs.writeFileSync(fallback, `Activated at ${new Date().toISOString()} but no workspace folder\n`);
+    return;
+  }
+
+  log(workspaceFolder, "Extension activated. Workspace: " + workspaceFolder.uri.fsPath);
+
+  const pattern = new vscode.RelativePattern(workspaceFolder, HIGHLIGHTS_FILENAME);
 
   fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-  fileWatcher.onDidChange(() => applyHighlights(context));
-  fileWatcher.onDidCreate(() => applyHighlights(context));
-  fileWatcher.onDidDelete(() => clearAllDecorations());
+  fileWatcher.onDidChange(() => { log(workspaceFolder, "FileWatcher: onDidChange"); lastHighlightsContent = ""; applyHighlights(context); });
+  fileWatcher.onDidCreate(() => { log(workspaceFolder, "FileWatcher: onDidCreate"); lastHighlightsContent = ""; applyHighlights(context); });
+  fileWatcher.onDidDelete(() => { log(workspaceFolder, "FileWatcher: onDidDelete"); lastHighlightsContent = ""; clearAllDecorations(); });
+
+  // Re-apply highlights whenever the active editor changes (backup trigger)
+  const editorListener = vscode.window.onDidChangeActiveTextEditor((editor) => {
+    log(workspaceFolder, "EditorChange: " + (editor?.document.uri.fsPath ?? "null"));
+    lastHighlightsContent = ""; // Force re-read on editor change
+    applyHighlights(context);
+  });
+
+  // Poll for highlight file changes every 500ms as a reliable fallback
+  const pollInterval = setInterval(() => {
+    applyHighlights(context);
+  }, 500);
 
   context.subscriptions.push(fileWatcher);
+  context.subscriptions.push(editorListener);
+  context.subscriptions.push({ dispose: () => clearInterval(pollInterval) });
   context.subscriptions.push(
     vscode.commands.registerCommand("demoHighlight.clear", clearAllDecorations)
   );
@@ -46,8 +75,6 @@ function clearAllDecorations() {
 }
 
 function applyHighlights(context: vscode.ExtensionContext) {
-  clearAllDecorations();
-
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
   if (!workspaceFolder) {
     return;
@@ -59,25 +86,44 @@ function applyHighlights(context: vscode.ExtensionContext) {
   );
 
   if (!fs.existsSync(highlightsPath)) {
+    if (lastHighlightsContent !== "") {
+      lastHighlightsContent = "";
+      clearAllDecorations();
+    }
     return;
   }
 
+  let raw: string;
   let entries: HighlightEntry[];
   try {
-    const raw = fs.readFileSync(highlightsPath, "utf-8");
+    raw = fs.readFileSync(highlightsPath, "utf-8");
     entries = JSON.parse(raw);
   } catch {
     return; // Invalid JSON or read error — silently skip
   }
 
+  // Skip if content hasn't changed and decorations are already applied
+  const editorUri = vscode.window.activeTextEditor?.document.uri.toString() ?? "";
+  const cacheKey = raw + "|" + editorUri;
+  if (cacheKey === lastHighlightsContent && activeDecorations.length > 0) {
+    return;
+  }
+  lastHighlightsContent = cacheKey;
+
+  clearAllDecorations();
+
   if (!Array.isArray(entries) || entries.length === 0) {
+    log(workspaceFolder, "applyHighlights: entries empty or not array");
     return;
   }
 
   const editor = vscode.window.activeTextEditor;
   if (!editor) {
+    log(workspaceFolder, "applyHighlights: no active editor");
     return;
   }
+
+  log(workspaceFolder, `applyHighlights: applying ${entries.length} entries to ${editor.document.uri.fsPath}`);
 
   for (const entry of entries) {
     const decorationType = createDecorationType(entry, context);

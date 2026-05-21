@@ -32,6 +32,18 @@ SQL demo guidelines:
 - Use `sqlcmd` in run_command examples.
 - Assume Windows auth by default in examples: `-E`.
 - Do not include markdown or explanation outside the JSON object.
+
+Highlights (optional):
+For create_file steps, you may include a "highlights" array to visually \
+emphasize important lines for learners. Each entry has:
+- "lines": [startLine, endLine] (1-based, inclusive)
+- "style": "box" | "arrow" | "underline" | "highlight"
+- "color": optional hex with alpha (e.g. "#FFD70066")
+Example:
+  {"action": "create_file", "filename": "01_demo.sql", "content": "...",
+   "highlights": [{"lines": [3, 5], "style": "box"}, {"lines": [10, 10], "style": "arrow"}]}
+Use highlights sparingly — only on the most educationally important lines \
+(key syntax, critical clauses, new concepts). 1-3 highlights per file maximum.
 """
 
 VISUAL_ONLY_APPEND_PROMPT = """\

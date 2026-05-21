@@ -4,7 +4,11 @@
     {
       "action": "create_file",
       "filename": "01_create_database.sql",
-      "content": "IF DB_ID('EmployeeDB') IS NULL\nBEGIN\n    CREATE DATABASE EmployeeDB;\nEND;\nGO\nUSE EmployeeDB;\nGO"
+      "content": "IF DB_ID('EmployeeDB') IS NULL\nBEGIN\n    CREATE DATABASE EmployeeDB;\nEND;\nGO\nUSE EmployeeDB;\nGO",
+      "highlights": [
+        {"lines": [1, 4], "style": "box", "color": "#FFD70044"},
+        {"lines": [6, 6], "style": "arrow"}
+      ]
     },
     {
       "action": "pause",
@@ -13,7 +17,11 @@
     {
       "action": "create_file",
       "filename": "02_create_tables.sql",
-      "content": "USE EmployeeDB;\nGO\n\nIF OBJECT_ID('dbo.Departments', 'U') IS NOT NULL\n    DROP TABLE dbo.Departments;\nIF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL\n    DROP TABLE dbo.Employees;\nGO\n\nCREATE TABLE dbo.Departments (\n    DepartmentID INT IDENTITY(1,1) PRIMARY KEY,\n    DepartmentName NVARCHAR(50) NOT NULL\n);\n\nCREATE TABLE dbo.Employees (\n    EmployeeID INT IDENTITY(1,1) PRIMARY KEY,\n    FirstName NVARCHAR(50) NOT NULL,\n    LastName NVARCHAR(50) NOT NULL,\n    DepartmentID INT NOT NULL FOREIGN KEY REFERENCES dbo.Departments(DepartmentID),\n    HireDate DATE NOT NULL\n);\nGO"
+      "content": "USE EmployeeDB;\nGO\n\nIF OBJECT_ID('dbo.Departments', 'U') IS NOT NULL\n    DROP TABLE dbo.Departments;\nIF OBJECT_ID('dbo.Employees', 'U') IS NOT NULL\n    DROP TABLE dbo.Employees;\nGO\n\nCREATE TABLE dbo.Departments (\n    DepartmentID INT IDENTITY(1,1) PRIMARY KEY,\n    DepartmentName NVARCHAR(50) NOT NULL\n);\n\nCREATE TABLE dbo.Employees (\n    EmployeeID INT IDENTITY(1,1) PRIMARY KEY,\n    FirstName NVARCHAR(50) NOT NULL,\n    LastName NVARCHAR(50) NOT NULL,\n    DepartmentID INT NOT NULL FOREIGN KEY REFERENCES dbo.Departments(DepartmentID),\n    HireDate DATE NOT NULL\n);\nGO",
+      "highlights": [
+        {"lines": [10, 13], "style": "box", "color": "#87CEEB44"},
+        {"lines": [19, 19], "style": "underline", "color": "#FF6347"}
+      ]
     },
     {
       "action": "pause",
@@ -22,7 +30,11 @@
     {
       "action": "create_file",
       "filename": "03_insert_sample_data.sql",
-      "content": "USE EmployeeDB;\nGO\n\nINSERT INTO dbo.Departments (DepartmentName) VALUES\n('Human Resources'),\n('Finance'),\n('IT'),\n('Marketing');\n\nINSERT INTO dbo.Employees (FirstName, LastName, DepartmentID, HireDate) VALUES\n('John', 'Doe', 3, '2020-01-15'),\n('Jane', 'Smith', 1, '2019-03-22'),\n('Emily', 'Jones', 2, '2021-07-01'),\n('Michael', 'Brown', 4, '2018-11-30');\nGO"
+      "content": "USE EmployeeDB;\nGO\n\nINSERT INTO dbo.Departments (DepartmentName) VALUES\n('Human Resources'),\n('Finance'),\n('IT'),\n('Marketing');\n\nINSERT INTO dbo.Employees (FirstName, LastName, DepartmentID, HireDate) VALUES\n('John', 'Doe', 3, '2020-01-15'),\n('Jane', 'Smith', 1, '2019-03-22'),\n('Emily', 'Jones', 2, '2021-07-01'),\n('Michael', 'Brown', 4, '2018-11-30');\nGO",
+      "highlights": [
+        {"lines": [4, 8], "style": "highlight"},
+        {"lines": [10, 14], "style": "box", "color": "#90EE9044"}
+      ]
     },
     {
       "action": "pause",
@@ -31,7 +43,10 @@
     {
       "action": "create_file",
       "filename": "04_verify_data.sql",
-      "content": "USE EmployeeDB;\nGO\n\nSELECT e.EmployeeID, e.FirstName, e.LastName, d.DepartmentName, e.HireDate\nFROM dbo.Employees e\nJOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID;\nGO"
+      "content": "USE EmployeeDB;\nGO\n\nSELECT e.EmployeeID, e.FirstName, e.LastName, d.DepartmentName, e.HireDate\nFROM dbo.Employees e\nJOIN dbo.Departments d ON e.DepartmentID = d.DepartmentID;\nGO",
+      "highlights": [
+        {"lines": [5, 6], "style": "arrow"}
+      ]
     },
     {
       "action": "pause",

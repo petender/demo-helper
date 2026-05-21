@@ -39,6 +39,18 @@ the very first step followed by a pause.
 - Code must be correct, runnable, and educational.
 - Add a 2-3 second pause between major segments.
 - Do not include markdown, explanation, or anything outside the JSON object.
+
+Highlights (optional):
+For create_file steps, you may include a "highlights" array to visually \
+emphasize important lines for learners. Each entry has:
+- "lines": [startLine, endLine] (1-based, inclusive)
+- "style": "box" | "arrow" | "underline" | "highlight"
+- "color": optional hex with alpha (e.g. "#FFD70066")
+Example:
+  {"action": "create_file", "filename": "01_demo.py", "content": "...",
+   "highlights": [{"lines": [3, 5], "style": "box"}, {"lines": [8, 8], "style": "arrow"}]}
+Use highlights sparingly — only on the most educationally important lines \
+(key patterns, new syntax, critical logic). 1-3 highlights per file maximum.
 """
 
 

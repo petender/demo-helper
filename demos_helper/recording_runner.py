@@ -92,6 +92,54 @@ def _ensure_tool(name: str) -> str:
     return path
 
 
+# ---------------------------------------------------------------------------
+# Highlight support
+# ---------------------------------------------------------------------------
+
+_HIGHLIGHTS_FILENAME = ".demo-highlights.json"
+_DEMO_HIGHLIGHT_EXT_DIR = Path(__file__).resolve().parent.parent / "vscode-demo-highlight"
+
+
+def _write_highlights(workspace_dir: Path, highlights: list) -> None:
+    """Write highlight entries to the workspace so the extension can render them."""
+    highlights_file = workspace_dir / _HIGHLIGHTS_FILENAME
+    highlights_file.write_text(json.dumps(highlights, indent=2), encoding="utf-8")
+
+
+def _clear_highlights(workspace_dir: Path) -> None:
+    """Clear active highlights by writing an empty array."""
+    _write_highlights(workspace_dir, [])
+
+
+def _apply_step_highlights(workspace_dir: Path, step: dict) -> None:
+    """Apply highlights defined in a plan step, if any."""
+    highlights = step.get("highlights")
+    if highlights:
+        _write_highlights(workspace_dir, highlights)
+        time.sleep(0.4)  # Allow extension to render decorations
+    else:
+        _clear_highlights(workspace_dir)
+
+
+def _install_demo_highlight_extension() -> None:
+    """Install the demo-highlight VS Code extension if a VSIX is available."""
+    vsix = _DEMO_HIGHLIGHT_EXT_DIR / "demo-highlight.vsix"
+    if not vsix.exists():
+        return
+    code_path = shutil.which("code")
+    if not code_path:
+        return
+    try:
+        subprocess.run(
+            [code_path, "--install-extension", str(vsix), "--force"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        pass
+
+
 def _prepare_demo_workspace(session_dir: Path) -> Path:
     workspace_dir = session_dir / "demo-workspace"
     settings_dir = workspace_dir / ".vscode"
@@ -124,6 +172,7 @@ def _create_session_dir(root: Path) -> Path:
 
 
 def _launch_vscode_window(workspace_dir: Path) -> None:
+    _install_demo_highlight_extension()
     code_path = _ensure_tool("code")
     subprocess.Popen(
         [
@@ -451,6 +500,7 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
             _open_file_in_vscode(target)
             time.sleep(1.0)
+            _apply_step_highlights(workspace_dir, step)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
@@ -472,6 +522,7 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
         else:
             print(f"[{idx}/{len(steps)}] unknown action '{action}', skipping")
 
+    _clear_highlights(workspace_dir)
     print("\nDemo playback complete!")
 
 
@@ -502,6 +553,7 @@ def _run_plan_stable_with_hook(
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
             _open_file_in_vscode(target)
             time.sleep(1.0)
+            _apply_step_highlights(workspace_dir, step)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
@@ -526,6 +578,7 @@ def _run_plan_stable_with_hook(
         if post_step_hook:
             post_step_hook(step, idx, len(steps))
 
+    _clear_highlights(workspace_dir)
     print("\nDemo playback complete!")
 
 

@@ -1,6 +1,6 @@
 ---
 name: Code Demo Video Generator
-description: "Generate scenario-based code demo plans, run playback in VS Code, and optionally record clean mp4/webm demo videos. Use when users want code demos, playback automation, or clean presentation recordings."
+description: "Generate scenario-based code demo plans, run playback in VS Code, and optionally capture screenshots and/or record mp4/webm output. Use when users want code demos, playback automation, screenshot artifacts, or clean presentation recordings."
 model: GPT-5.3-Codex
 tags:
   - video
@@ -54,3 +54,26 @@ Guide the user through a chat-first flow:
 1. Start recording immediately before playback
 2. Stop recording right after playback
 3. Save as mp4 or webm
+
+## Output Selection Rules
+
+1. Always offer output choices as: `mp4` OR `screenshots` OR `both`.
+2. Default to `screenshots` when the user does not explicitly choose an output mode.
+3. When presenting options, always remind the user:
+  - Screenshots support reliable code highlight visibility.
+  - Built-in mp4 output does not guarantee visible highlight rendering.
+4. If user says "go" without selecting output mode, proceed with `screenshots` by default.
+
+## Required User Prompt Template
+
+When asking the user how to proceed with playback/recording, always include this exact structure:
+
+1. mp4 only
+2. screenshots only (default, recommended for highlight visibility)
+3. both (mp4 + screenshots)
+
+Always include this reminder directly under the options:
+- Screenshots support reliable code highlight visibility.
+- Built-in mp4 output does not guarantee visible highlight rendering.
+
+If the user replies with a generic confirmation like "go", "run it", or "continue" without selecting an option, proceed with screenshots only.

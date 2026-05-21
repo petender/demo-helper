@@ -177,7 +177,8 @@ code --install-extension demo-highlight.vsix --force
 ### Limitations
 
 - The extension must be installed and VS Code must load it (happens automatically on workspace open).
-- Highlights appear in both screenshots and video recordings (they are live editor decorations).
+- Highlights are reliably visible in screenshot capture.
+- Built-in MP4 recording does not guarantee visible highlight rendering.
 - Maximum ~1-3 highlights per file recommended for clarity.
 
 ## Minimal CLI Reference (Fallback)

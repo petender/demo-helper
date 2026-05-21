@@ -692,6 +692,45 @@ def _wait_for_editor(workspace_dir: Path, filename: str, timeout: float = 20.0) 
     return False
 
 
+def _wait_for_highlight_apply(
+    workspace_dir: Path,
+    filename: str,
+    since_ts: float,
+    timeout: float = 8.0,
+) -> bool:
+    """Wait until extension logs a highlight apply event for the target file."""
+    log_file = workspace_dir / ".demo-highlight-log.txt"
+    target = filename.lower()
+    end = time.time() + timeout
+
+    while time.time() < end:
+        if log_file.exists():
+            try:
+                content = log_file.read_text(encoding="utf-8")
+            except OSError:
+                time.sleep(0.2)
+                continue
+
+            for line in reversed(content.splitlines()):
+                if "applyHighlights: applying" not in line:
+                    continue
+                if target not in line.lower():
+                    continue
+
+                try:
+                    stamp = line.split("]", 1)[0].lstrip("[")
+                    event_ts = datetime.fromisoformat(stamp.replace("Z", "+00:00")).timestamp()
+                except Exception:
+                    event_ts = 0.0
+
+                if event_ts >= since_ts:
+                    return True
+
+        time.sleep(0.2)
+
+    return False
+
+
 def _warmup_vscode_editor(workspace_dir: Path) -> None:
     """Open a dummy file to warm up VS Code's editor rendering pipeline.
 
@@ -837,39 +876,112 @@ def _count_create_file_steps(plan: Dict) -> int:
     return sum(1 for step in plan.get("steps", []) if step.get("action") == "create_file")
 
 
+def _step_screenshot_targets(step: dict) -> list[dict]:
+    """Return screenshot targets for a create_file step.
+
+    If the step defines multiple line-based highlights, each highlight gets its own
+    screenshot so off-screen ranges are captured deterministically.
+    """
+    highlights = step.get("highlights")
+    if not isinstance(highlights, list) or not highlights:
+        return [{"open_line": None, "highlight": None, "suffix": ""}]
+
+    targets: list[dict] = []
+    for idx, entry in enumerate(highlights, 1):
+        if not isinstance(entry, dict):
+            continue
+        lines = entry.get("lines")
+        if not (isinstance(lines, list) and len(lines) == 2):
+            continue
+        try:
+            start = int(lines[0])
+            end = int(lines[1])
+        except (TypeError, ValueError):
+            continue
+        if start <= 0 or end < start:
+            continue
+
+        targets.append(
+            {
+                "open_line": start,
+                "highlight": entry,
+                "suffix": f"_h{idx:02d}_l{start}-{end}",
+            }
+        )
+
+    if targets:
+        return targets
+
+    # Fallback to one screenshot when highlights are present but not line-based.
+    return [{"open_line": None, "highlight": None, "suffix": ""}]
+
+
+def _count_screenshot_targets(plan: Dict) -> int:
+    total = 0
+    for step in plan.get("steps", []):
+        if step.get("action") != "create_file":
+            continue
+        total += len(_step_screenshot_targets(step))
+    return total
+
+
 def _build_screenshot_post_step_hook(
     plan: Dict,
     captures_dir: Path,
     workspace_dir: Path,
     title_hint: str,
 ) -> Callable[[dict, int, int], None]:
-    create_file_total = _count_create_file_steps(plan)
-    create_file_index = 0
+    screenshot_total = _count_screenshot_targets(plan)
+    screenshot_index = 0
 
     def _post_step_hook(step: dict, idx: int, total: int) -> None:
-        nonlocal create_file_index
+        nonlocal screenshot_index
         if step.get("action") != "create_file":
             return
 
-        create_file_index += 1
         filename = _sanitize_for_filename(step.get("filename", f"step-{idx}"))
-        screenshot_file = captures_dir / f"{create_file_index:02d}_{filename}.png"
+        target_name = Path(step.get("filename", "")).name or filename
+        step_targets = _step_screenshot_targets(step)
+        target_file = workspace_dir / "output" / step.get("filename", "")
 
-        # Ensure highlights are active before screenshot capture.
-        _apply_step_highlights(workspace_dir, step)
-        time.sleep(0.5)
-        _apply_step_highlights(workspace_dir, step)
-        time.sleep(0.35)
+        for target in step_targets:
+            if target.get("open_line"):
+                _open_file_in_vscode(target_file, line=int(target["open_line"]), column=1)
+                _wait_for_editor(workspace_dir, target_name)
+                time.sleep(0.4)
 
-        # Keep the active editor visible before taking the screenshot.
-        _activate_vscode_window(title_hint)
-        time.sleep(0.25)
-        _save_primary_desktop_screenshot(screenshot_file)
+            if target.get("highlight") is None:
+                # No line-based highlight target; apply full step highlights.
+                highlight_step = step
+            else:
+                # Focus one range at a time to guarantee off-screen sections are captured.
+                highlight_step = {
+                    "action": step.get("action"),
+                    "highlights": [target["highlight"]],
+                }
 
-        print(
-            f"      screenshot {create_file_index}/{create_file_total}: "
-            f"{screenshot_file.name}"
-        )
+            apply_started = time.time()
+            _apply_step_highlights(workspace_dir, highlight_step)
+            if not _wait_for_highlight_apply(workspace_dir, target_name, apply_started):
+                apply_started = time.time()
+                _apply_step_highlights(workspace_dir, highlight_step)
+                if not _wait_for_highlight_apply(workspace_dir, target_name, apply_started):
+                    raise RuntimeError(
+                        f"Highlight rendering could not be confirmed for {target_name}; capture aborted."
+                    )
+
+            screenshot_index += 1
+            suffix = target.get("suffix", "")
+            screenshot_file = captures_dir / f"{screenshot_index:02d}_{filename}{suffix}.png"
+
+            _activate_vscode_window(title_hint)
+            time.sleep(0.2)
+            _save_primary_desktop_screenshot(screenshot_file)
+
+            print(
+                f"      screenshot {screenshot_index}/{screenshot_total}: "
+                f"{screenshot_file.name}"
+            )
 
     return _post_step_hook
 
@@ -1159,6 +1271,14 @@ def run_capture_play(
     plan_file_name: str | None = None,
     scenario_name: str | None = None,
 ) -> Tuple[Path, Path | None, Path | None]:
+    # Keep capture behavior deterministic by output type:
+    # - screenshots: stable mode (full file write + highlight render)
+    # - mp4/both: typing mode (dynamic visual recording)
+    if capture_mode == "screenshots":
+        mode = "stable"
+    elif capture_mode in {"mp4", "both"}:
+        mode = "typing"
+
     if capture_mode == "screenshots":
         workspace_dir, captures_dir = run_screenshot_play(
             plan=plan,

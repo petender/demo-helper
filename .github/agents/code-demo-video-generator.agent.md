@@ -37,6 +37,24 @@ Guide the user through a chat-first flow:
 3. During screenshot or recording capture flows, do not execute `run_command` steps.
 4. Capture flows are for code snippet generation and visual artifact creation.
 
+## Chat-First Checklist Requirement
+
+Before running any playback/capture command, the agent must present a preflight checklist in chat and wait for explicit confirmation.
+
+Required chat preflight sections:
+1. Automated machine checks (to be validated at runtime):
+  - VS Code CLI available
+  - ffmpeg available
+  - primary display resolution target met
+  - GitHub Light theme extension installed
+  - demo highlight extension installed (for screenshots/both)
+2. Manual operator checks (user action):
+  - close other apps/notifications
+  - do not use keyboard/mouse during capture
+  - recommended resolution reminder
+
+The terminal checklist is supplemental. The authoritative user confirmation step must happen in chat first.
+
 ## Supported Scenarios
 
 1. Python -> recordings/session-<timestamp>/python/plan.json

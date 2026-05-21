@@ -24,3 +24,10 @@ These rules are mandatory for all Copilot agents operating in this repository.
 1. Prefer deterministic, reproducible runs.
 2. Fail fast with actionable errors.
 3. Do not hide behavior changes from users; print skipped-step summaries when relevant.
+
+## Chat Preflight UX
+
+1. Before any playback/capture terminal command, present preflight checklist in chat.
+2. Include both automated machine checks and manual operator checks in chat.
+3. Require explicit user confirmation in chat before execution.
+4. Treat terminal-rendered checklist output as secondary, not primary user confirmation UX.

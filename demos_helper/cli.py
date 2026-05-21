@@ -545,8 +545,8 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     screenshot_play_p.add_argument(
-        "--mode", choices=["stable", "typing"], default="typing",
-        help="Playback mode for screenshot capture (default: typing)",
+        "--mode", choices=["stable", "typing"], default="stable",
+        help="Playback mode for screenshot capture (default: stable)",
     )
     screenshot_play_p.add_argument(
         "--clean-view",
@@ -592,8 +592,8 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     screenshot_run_p.add_argument(
-        "--mode", choices=["stable", "typing"], default="typing",
-        help="Playback mode for screenshot capture (default: typing)",
+        "--mode", choices=["stable", "typing"], default="stable",
+        help="Playback mode for screenshot capture (default: stable)",
     )
     screenshot_run_p.add_argument(
         "--clean-view",
@@ -751,6 +751,10 @@ def main():
         _print_operator_checklist(args.capture)
         _confirm_operator_ready(skip_confirmation=args.yes)
 
+        effective_mode = "stable" if args.capture == "screenshots" else "typing"
+        if args.mode != effective_mode:
+            print(f"Capture mode '{args.capture}' forces playback mode '{effective_mode}'.")
+
         with open(args.plan_file, encoding="utf-8") as f:
             plan = normalize_plan_highlights(json.load(f))
 
@@ -764,7 +768,7 @@ def main():
             countdown=args.countdown,
             video_format=args.format,
             resolution=args.resolution,
-            mode=args.mode,
+            mode=effective_mode,
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             video_file=args.video_file,
@@ -783,6 +787,10 @@ def main():
         _print_operator_checklist(args.capture)
         _confirm_operator_ready(skip_confirmation=args.yes)
 
+        effective_mode = "stable" if args.capture == "screenshots" else "typing"
+        if args.mode != effective_mode:
+            print(f"Capture mode '{args.capture}' forces playback mode '{effective_mode}'.")
+
         plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
             scenario=args.scenario,
             prompt=args.prompt,
@@ -791,7 +799,7 @@ def main():
             countdown=args.countdown,
             video_format=args.format,
             resolution=args.resolution,
-            mode=args.mode,
+            mode=effective_mode,
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             plan_path=args.plan_file,
@@ -810,6 +818,9 @@ def main():
         _print_operator_checklist("screenshots")
         _confirm_operator_ready(skip_confirmation=args.yes)
 
+        if args.mode != "stable":
+            print("Screenshot capture forces playback mode 'stable'.")
+
         with open(args.plan_file, encoding="utf-8") as f:
             plan = normalize_plan_highlights(json.load(f))
 
@@ -820,7 +831,7 @@ def main():
             plan=plan,
             speed=args.speed,
             countdown=args.countdown,
-            mode=args.mode,
+            mode="stable",
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             screenshots_dir=args.screenshots_dir,
@@ -835,12 +846,15 @@ def main():
         _print_operator_checklist("screenshots")
         _confirm_operator_ready(skip_confirmation=args.yes)
 
+        if args.mode != "stable":
+            print("Screenshot capture forces playback mode 'stable'.")
+
         plan_file, workspace_dir, captures_dir = generate_and_screenshot(
             scenario=args.scenario,
             prompt=args.prompt,
             speed=args.speed,
             countdown=args.countdown,
-            mode=args.mode,
+            mode="stable",
             clean_view=args.clean_view,
             focus_lock=not args.no_focus_lock,
             plan_path=args.plan_file,

@@ -8,3 +8,4 @@ build/
 #Recordings
 /recordings/
 /output/
+.demo-highlight-log.txt

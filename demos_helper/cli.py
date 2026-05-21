@@ -1,6 +1,7 @@
 import argparse
 import json
 import sys
+from datetime import datetime
 from pathlib import Path
 
 try:
@@ -31,6 +32,38 @@ def _prompt_choice(prompt: str, choices: list[str], default: str) -> str:
         if value in choices:
             return value
         print(f"Invalid choice: {value}")
+
+
+def _save_plan_file(path: str, plan: dict) -> None:
+    plan_path = Path(path)
+    plan_path.parent.mkdir(parents=True, exist_ok=True)
+    with open(plan_path, "w", encoding="utf-8") as f:
+        json.dump(plan, f, indent=2)
+
+
+def _timestamp() -> str:
+    return datetime.now().strftime("%Y%m%d-%H%M%S")
+
+
+def _default_plan_name(scenario: str) -> str:
+    mapping = {
+        "python": "plan.json",
+        "sql": "sqlplan.json",
+        "sql-visual": "sqlplan.visual.json",
+        "csharp": "csharpplan.json",
+        "azdo": "azdoplan.json",
+        "gha": "ghaplan.json",
+    }
+    return mapping[scenario]
+
+
+def _default_plan_output_for_scenario(scenario: str) -> str:
+    return str(
+        Path("recordings")
+        / f"session-{_timestamp()}"
+        / scenario
+        / _default_plan_name(scenario)
+    )
 
 
 def _launch_builtin_wizard() -> None:
@@ -118,8 +151,11 @@ def main():
         "description", help="Written description of what to demo",
     )
     plan_p.add_argument(
-        "-o", "--output", default="scenarios/python/plan.json",
-        help="Output file for the plan (default: scenarios/python/plan.json)",
+        "-o", "--output",
+        help=(
+            "Output file for the plan "
+            "(default: recordings/session-<timestamp>/python/plan.json)"
+        ),
     )
 
     # ── sql-plan ─────────────────────────────────────────────────────
@@ -130,8 +166,11 @@ def main():
         "description", help="Written description of what SQL demo to create",
     )
     sql_plan_p.add_argument(
-        "-o", "--output", default="scenarios/sql/sqlplan.json",
-        help="Output file for the SQL plan (default: scenarios/sql/sqlplan.json)",
+        "-o", "--output",
+        help=(
+            "Output file for the SQL plan "
+            "(default: recordings/session-<timestamp>/sql/sqlplan.json)"
+        ),
     )
     sql_plan_p.add_argument(
         "--visual-only",
@@ -147,8 +186,11 @@ def main():
         "description", help="Written description of what C# demo to create",
     )
     csharp_plan_p.add_argument(
-        "-o", "--output", default="scenarios/csharp/csharpplan.json",
-        help="Output file for the C# plan (default: scenarios/csharp/csharpplan.json)",
+        "-o", "--output",
+        help=(
+            "Output file for the C# plan "
+            "(default: recordings/session-<timestamp>/csharp/csharpplan.json)"
+        ),
     )
 
     # ── azdo-plan ────────────────────────────────────────────────────
@@ -159,8 +201,11 @@ def main():
         "description", help="Written description of what Azure DevOps pipeline demo to create",
     )
     azdo_plan_p.add_argument(
-        "-o", "--output", default="scenarios/azdo/azdoplan.json",
-        help="Output file for the Azure DevOps plan (default: scenarios/azdo/azdoplan.json)",
+        "-o", "--output",
+        help=(
+            "Output file for the Azure DevOps plan "
+            "(default: recordings/session-<timestamp>/azdo/azdoplan.json)"
+        ),
     )
 
     # ── gha-plan ─────────────────────────────────────────────────────
@@ -171,8 +216,11 @@ def main():
         "description", help="Written description of what GitHub Actions demo to create",
     )
     gha_plan_p.add_argument(
-        "-o", "--output", default="scenarios/gha/ghaplan.json",
-        help="Output file for the GitHub Actions plan (default: scenarios/gha/ghaplan.json)",
+        "-o", "--output",
+        help=(
+            "Output file for the GitHub Actions plan "
+            "(default: recordings/session-<timestamp>/gha/ghaplan.json)"
+        ),
     )
 
     # ── play ─────────────────────────────────────────────────────────
@@ -227,8 +275,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     sql_run_p.add_argument(
-        "--save-plan", default="scenarios/sql/sqlplan.json",
-        help="Save generated SQL plan to this file (default: scenarios/sql/sqlplan.json)",
+        "--save-plan",
+        help="Also save generated SQL plan to this file",
     )
     sql_run_p.add_argument(
         "--visual-only",
@@ -252,8 +300,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     csharp_run_p.add_argument(
-        "--save-plan", default="scenarios/csharp/csharpplan.json",
-        help="Save generated C# plan to this file (default: scenarios/csharp/csharpplan.json)",
+        "--save-plan",
+        help="Also save generated C# plan to this file",
     )
 
     # ── azdo-run ─────────────────────────────────────────────────────
@@ -272,8 +320,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     azdo_run_p.add_argument(
-        "--save-plan", default="scenarios/azdo/azdoplan.json",
-        help="Save generated Azure DevOps plan to this file (default: scenarios/azdo/azdoplan.json)",
+        "--save-plan",
+        help="Also save generated Azure DevOps plan to this file",
     )
 
     # ── gha-run ──────────────────────────────────────────────────────
@@ -292,8 +340,8 @@ def main():
         help="Seconds before playback starts (default: 5)",
     )
     gha_run_p.add_argument(
-        "--save-plan", default="scenarios/gha/ghaplan.json",
-        help="Save generated GitHub Actions plan to this file (default: scenarios/gha/ghaplan.json)",
+        "--save-plan",
+        help="Also save generated GitHub Actions plan to this file",
     )
 
     # ── agent-ui ─────────────────────────────────────────────────────
@@ -489,9 +537,9 @@ def main():
     if args.command == "plan":
         print(f'Planning demo for: "{args.description}"')
         plan = normalize_plan_highlights(plan_demo(args.description))
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        print(f"Plan saved to {args.output}")
+        output_path = args.output or _default_plan_output_for_scenario("python")
+        _save_plan_file(output_path, plan)
+        print(f"Plan saved to {output_path}")
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -500,18 +548,19 @@ def main():
         plan = normalize_plan_highlights(
             plan_sql_demo(args.description, visual_only=args.visual_only)
         )
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        print(f"SQL plan saved to {args.output}")
+        scenario = "sql-visual" if args.visual_only else "sql"
+        output_path = args.output or _default_plan_output_for_scenario(scenario)
+        _save_plan_file(output_path, plan)
+        print(f"SQL plan saved to {output_path}")
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
     elif args.command == "csharp-plan":
         print(f'Planning C# demo for: "{args.description}"')
         plan = normalize_plan_highlights(plan_csharp_demo(args.description))
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        print(f"C# plan saved to {args.output}")
+        output_path = args.output or _default_plan_output_for_scenario("csharp")
+        _save_plan_file(output_path, plan)
+        print(f"C# plan saved to {output_path}")
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -520,9 +569,9 @@ def main():
         plan = normalize_plan_highlights(
             plan_pipeline_demo(args.description, pipeline_type="azure-devops")
         )
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        print(f"Azure DevOps plan saved to {args.output}")
+        output_path = args.output or _default_plan_output_for_scenario("azdo")
+        _save_plan_file(output_path, plan)
+        print(f"Azure DevOps plan saved to {output_path}")
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -531,9 +580,9 @@ def main():
         plan = normalize_plan_highlights(
             plan_pipeline_demo(args.description, pipeline_type="github-actions")
         )
-        with open(args.output, "w", encoding="utf-8") as f:
-            json.dump(plan, f, indent=2)
-        print(f"GitHub Actions plan saved to {args.output}")
+        output_path = args.output or _default_plan_output_for_scenario("gha")
+        _save_plan_file(output_path, plan)
+        print(f"GitHub Actions plan saved to {output_path}")
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -549,8 +598,7 @@ def main():
         print(f"  Steps: {len(plan['steps'])}")
 
         if args.save_plan:
-            with open(args.save_plan, "w", encoding="utf-8") as f:
-                json.dump(plan, f, indent=2)
+            _save_plan_file(args.save_plan, plan)
             print(f"Plan saved to {args.save_plan}")
 
         play_demo(plan, char_delay=args.speed, countdown=args.countdown)
@@ -564,8 +612,7 @@ def main():
         print(f"  Steps: {len(plan['steps'])}")
 
         if args.save_plan:
-            with open(args.save_plan, "w", encoding="utf-8") as f:
-                json.dump(plan, f, indent=2)
+            _save_plan_file(args.save_plan, plan)
             print(f"SQL plan saved to {args.save_plan}")
 
         play_demo(plan, char_delay=args.speed, countdown=args.countdown)
@@ -577,8 +624,7 @@ def main():
         print(f"  Steps: {len(plan['steps'])}")
 
         if args.save_plan:
-            with open(args.save_plan, "w", encoding="utf-8") as f:
-                json.dump(plan, f, indent=2)
+            _save_plan_file(args.save_plan, plan)
             print(f"C# plan saved to {args.save_plan}")
 
         play_demo(plan, char_delay=args.speed, countdown=args.countdown)
@@ -592,8 +638,7 @@ def main():
         print(f"  Steps: {len(plan['steps'])}")
 
         if args.save_plan:
-            with open(args.save_plan, "w", encoding="utf-8") as f:
-                json.dump(plan, f, indent=2)
+            _save_plan_file(args.save_plan, plan)
             print(f"Azure DevOps plan saved to {args.save_plan}")
 
         play_demo(plan, char_delay=args.speed, countdown=args.countdown)
@@ -607,8 +652,7 @@ def main():
         print(f"  Steps: {len(plan['steps'])}")
 
         if args.save_plan:
-            with open(args.save_plan, "w", encoding="utf-8") as f:
-                json.dump(plan, f, indent=2)
+            _save_plan_file(args.save_plan, plan)
             print(f"GitHub Actions plan saved to {args.save_plan}")
 
         play_demo(plan, char_delay=args.speed, countdown=args.countdown)

@@ -72,12 +72,12 @@ The chat agent can run these scenarios end-to-end:
 6. `gha`
 
 Plan file defaults:
-1. `plans/plan.json`
-2. `plans/sqlplan.json`
-3. `plans/sqlplan.visual.json`
-4. `plans/csharpplan.json`
-5. `plans/azdoplan.json`
-6. `plans/ghaplan.json`
+1. `recordings/session-<timestamp>/python/plan.json`
+2. `recordings/session-<timestamp>/sql/sqlplan.json`
+3. `recordings/session-<timestamp>/sql-visual/sqlplan.visual.json`
+4. `recordings/session-<timestamp>/csharp/csharpplan.json`
+5. `recordings/session-<timestamp>/azdo/azdoplan.json`
+6. `recordings/session-<timestamp>/gha/ghaplan.json`
 
 When using agentic `record-run`, the plan is stored inside the session trace folder by default.
 
@@ -151,7 +151,7 @@ Fields:
 
 ### Where to configure
 
-- **Per-plan**: Edit the `"highlights"` array in your plan JSON file (e.g. `plans/sqlplan.visual.json`).
+- **Per-plan**: Edit the `"highlights"` array in your plan JSON file (e.g. `recordings/session-*/sql-visual/sqlplan.visual.json`).
 - **AI-generated plans**: The SQL planner (`demos_helper/sql_planner.py`) and general planner (`demos_helper/planner.py`) include highlight instructions in their system prompts.
 - **Arrow icon color**: Edit `vscode-demo-highlight/assets/arrow.svg` (currently green `#22C55E`), then rebuild the VSIX.
 - **Extension defaults**: In `vscode-demo-highlight/src/extension.ts`, fallback colors are defined in `createDecorationType()`.
@@ -179,7 +179,11 @@ Use these only if you explicitly want manual execution.
 
 Generate plan:
 ```powershell
-python -m demos_helper.cli <scenario>-plan "<prompt>" -o plans/<plan-file>.json
+# Let the CLI write to recording artifacts automatically
+python -m demos_helper.cli <scenario>-plan "<prompt>"
+
+# Optional explicit output path
+python -m demos_helper.cli <scenario>-plan "<prompt>" -o recordings/session-<timestamp>/<scenario>/<plan-file>.json
 ```
 
 Play plan:

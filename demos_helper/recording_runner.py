@@ -205,7 +205,7 @@ def _prepare_demo_workspace(session_dir: Path) -> Path:
         "workbench.startupEditor": "none",
         "workbench.tips.enabled": False,
         "workbench.welcome.enabled": False,
-        "window.zoomLevel": 0.3,
+        "window.zoomLevel": 0.5,
         "workbench.colorTheme": _PREFERRED_THEME_NAME,
         "editor.minimap.enabled": False,
         "breadcrumbs.enabled": False,

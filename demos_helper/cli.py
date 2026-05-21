@@ -23,6 +23,10 @@ from .recording_runner import (
 from .sql_planner import plan_sql_demo
 
 
+DEFAULT_RESOLUTION = "1920x1280"
+DEFAULT_CAPTURE_MODE = "screenshots"
+
+
 def _prompt_choice(prompt: str, choices: list[str], default: str) -> str:
     options = "/".join(choices)
     while True:
@@ -31,6 +35,19 @@ def _prompt_choice(prompt: str, choices: list[str], default: str) -> str:
             return default
         if value in choices:
             return value
+        print(f"Invalid choice: {value}")
+
+
+def _prompt_yes_no(prompt: str, default_yes: bool = False) -> bool:
+    default_text = "Y/n" if default_yes else "y/N"
+    while True:
+        value = input(f"{prompt} [{default_text}]: ").strip().lower()
+        if not value:
+            return default_yes
+        if value in {"y", "yes"}:
+            return True
+        if value in {"n", "no"}:
+            return False
         print(f"Invalid choice: {value}")
 
 
@@ -66,6 +83,25 @@ def _default_plan_output_for_scenario(scenario: str) -> str:
     )
 
 
+def _print_operator_checklist(capture_mode: str) -> None:
+    print("\nOperator checklist (manual, not auto-validated):")
+    print("  1. Close all apps and notifications except this VS Code window.")
+    print("  2. Do not use other apps, mouse, or keyboard during capture.")
+    print(f"  3. Recommended resolution: {DEFAULT_RESOLUTION}.")
+    if capture_mode in {"mp4", "both"}:
+        print("  Warning: built-in MP4 output does not guarantee visible code highlights.")
+        print("  If highlighted video is required, run a 3rd-party recorder in parallel.")
+    print("")
+
+
+def _confirm_operator_ready(skip_confirmation: bool) -> None:
+    if skip_confirmation:
+        return
+    ready = _prompt_yes_no("Proceed with capture using this checklist", default_yes=False)
+    if not ready:
+        raise RuntimeError("Capture cancelled by user before preflight confirmation.")
+
+
 def _launch_builtin_wizard() -> None:
     print("Starting demo-helper native wizard...")
     print("This fallback works without agent extensions.")
@@ -92,7 +128,7 @@ def _launch_builtin_wizard() -> None:
     capture_mode = _prompt_choice(
         "Output type",
         ["screenshots", "mp4", "both"],
-        default="both",
+        default=DEFAULT_CAPTURE_MODE,
     )
 
     video_format = "mp4"
@@ -109,6 +145,9 @@ def _launch_builtin_wizard() -> None:
         default="stable",
     )
 
+    _print_operator_checklist(capture_mode)
+    _confirm_operator_ready(skip_confirmation=False)
+
     plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
         scenario=scenario_aliases[scenario],
         prompt=prompt,
@@ -116,7 +155,7 @@ def _launch_builtin_wizard() -> None:
         speed=0.03,
         countdown=8,
         video_format=video_format,
-        resolution="1920x1280",
+        resolution=DEFAULT_RESOLUTION,
         mode=mode,
         clean_view=False,
         focus_lock=True,
@@ -365,15 +404,15 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_play_p.add_argument(
-        "--capture", choices=["mp4", "screenshots", "both"], default="both",
-        help="Capture output type (default: both)",
+        "--capture", choices=["mp4", "screenshots", "both"], default=DEFAULT_CAPTURE_MODE,
+        help="Capture output type (default: screenshots)",
     )
     record_play_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
         help="Recording format (default: mp4)",
     )
     record_play_p.add_argument(
-        "--resolution", default="1920x1280",
+        "--resolution", default=DEFAULT_RESOLUTION,
         help="Output recording resolution WIDTHxHEIGHT (default: 1920x1280)",
     )
     record_play_p.add_argument(
@@ -397,6 +436,11 @@ def main():
     record_play_p.add_argument(
         "--screenshots-dir",
         help="Optional custom output directory for screenshots",
+    )
+    record_play_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip checklist confirmation prompt",
     )
 
     # ── record-run ───────────────────────────────────────────────────
@@ -423,15 +467,15 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_run_p.add_argument(
-        "--capture", choices=["mp4", "screenshots", "both"], default="both",
-        help="Capture output type (default: both)",
+        "--capture", choices=["mp4", "screenshots", "both"], default=DEFAULT_CAPTURE_MODE,
+        help="Capture output type (default: screenshots)",
     )
     record_run_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
         help="Recording format (default: mp4)",
     )
     record_run_p.add_argument(
-        "--resolution", default="1920x1280",
+        "--resolution", default=DEFAULT_RESOLUTION,
         help="Output recording resolution WIDTHxHEIGHT (default: 1920x1280)",
     )
     record_run_p.add_argument(
@@ -455,6 +499,11 @@ def main():
     record_run_p.add_argument(
         "--screenshots-dir",
         help="Optional custom output directory for screenshots",
+    )
+    record_run_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip checklist confirmation prompt",
     )
 
     # ── screenshot-play ──────────────────────────────────────────────
@@ -488,6 +537,11 @@ def main():
     screenshot_play_p.add_argument(
         "--screenshots-dir",
         help="Optional custom output directory for screenshots",
+    )
+    screenshot_play_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip checklist confirmation prompt",
     )
 
     # ── screenshot-run ───────────────────────────────────────────────
@@ -530,6 +584,11 @@ def main():
     screenshot_run_p.add_argument(
         "--screenshots-dir",
         help="Optional custom output directory for screenshots",
+    )
+    screenshot_run_p.add_argument(
+        "--yes",
+        action="store_true",
+        help="Skip checklist confirmation prompt",
     )
 
     args = parser.parse_args()
@@ -664,6 +723,9 @@ def main():
             launch_agent_gui()
 
     elif args.command == "record-play":
+        _print_operator_checklist(args.capture)
+        _confirm_operator_ready(skip_confirmation=args.yes)
+
         with open(args.plan_file, encoding="utf-8") as f:
             plan = normalize_plan_highlights(json.load(f))
 
@@ -692,6 +754,9 @@ def main():
             print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "record-run":
+        _print_operator_checklist(args.capture)
+        _confirm_operator_ready(skip_confirmation=args.yes)
+
         plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
             scenario=args.scenario,
             prompt=args.prompt,
@@ -715,6 +780,9 @@ def main():
             print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "screenshot-play":
+        _print_operator_checklist("screenshots")
+        _confirm_operator_ready(skip_confirmation=args.yes)
+
         with open(args.plan_file, encoding="utf-8") as f:
             plan = normalize_plan_highlights(json.load(f))
 
@@ -736,6 +804,9 @@ def main():
         print(f"Screenshots saved to: {captures_dir}")
 
     elif args.command == "screenshot-run":
+        _print_operator_checklist("screenshots")
+        _confirm_operator_ready(skip_confirmation=args.yes)
+
         plan_file, workspace_dir, captures_dir = generate_and_screenshot(
             scenario=args.scenario,
             prompt=args.prompt,

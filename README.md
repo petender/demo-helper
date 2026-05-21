@@ -88,6 +88,7 @@ When using agentic `record-run`, the plan is stored inside the session trace fol
 - Close all other applications (Outlook, Teams, browsers, etc.)
 - Dismiss any system notifications or pop-ups
 - Only this VS Code window (where you trigger the agent) should be active on your desktop
+- Do not use other apps, mouse, or keyboard while recording/capture is running
 
 This is the same discipline you'd apply to a real human-recorded demo — any foreground window or notification will appear in the capture and can steal focus from the demo VS Code window.
 
@@ -101,9 +102,15 @@ Recording is optimized for reliability:
 5. Closes demo VS Code window on completion.
 
 Recommended recording defaults:
-- `--format mp4`
+- `--capture screenshots` (recommended default)
 - `--resolution 1920x1280`
+- VS Code zoom approximately 110% (configured via workspace settings)
+- GitHub Light theme installed and activated automatically
 - `--no-focus-lock` when you want to keep using another monitor
+
+MP4 note:
+- Built-in MP4 capture does not guarantee visible highlight rendering in the video.
+- If highlighted video output is required, run a third-party recorder in parallel.
 
 ## Code Highlights (VS Code Extension)
 
@@ -232,9 +239,13 @@ python -m demos_helper.cli screenshot-run <scenario> "<prompt>" --countdown 8 --
 ```
 
 `--capture` choices for `record-play` and `record-run`:
-- `mp4`: record video only (default)
-- `screenshots`: capture one PNG per `create_file` step only
+- `screenshots`: capture one PNG per `create_file` step only (default)
+- `mp4`: record video only
 - `both`: record MP4 and capture PNG screenshots in one playback run
+
+Preflight confirmation:
+- `record-play`, `record-run`, `screenshot-play`, and `screenshot-run` print an operator checklist and require confirmation before capture starts.
+- Use `--yes` to skip the confirmation prompt for automated/scripted runs.
 
 ## Output Locations
 

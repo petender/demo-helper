@@ -1,41 +1,75 @@
 {
-  "title": "Python Foundry Agent Snippet Demo",
+  "title": "Python Web App with Microsoft Entra ID Authentication using OpenID Connect",
   "steps": [
     {
-      "action": "create_file",
-      "filename": ".env.example",
-      "content": "FOUNDRY_AGENT_ENDPOINT=https://<your-endpoint>/agents\nFOUNDRY_API_KEY=<your-api-key>\nFOUNDRY_AGENT_ID=<your-agent-id>\n"
+      "action": "run_command",
+      "command": "pip install flask msal"
     },
     {
       "action": "pause",
-      "seconds": 1
+      "seconds": 4
     },
     {
       "action": "create_file",
-      "filename": "src/config.py",
-      "content": "import os\n\n\ndef get_foundry_config() -> dict:\n    return {\n        \"endpoint\": os.getenv(\"FOUNDRY_AGENT_ENDPOINT\", \"\"),\n        \"api_key\": os.getenv(\"FOUNDRY_API_KEY\", \"\"),\n        \"agent_id\": os.getenv(\"FOUNDRY_AGENT_ID\", \"\"),\n    }\n"
+      "filename": "01_app_setup.py",
+      "content": "from flask import Flask, redirect, url_for, session, request\nfrom msal import ConfidentialClientApplication\nimport uuid\n\n# Create Flask app\napp = Flask(__name__)\napp.secret_key = 'your_secret_key_here'  # Replace with a secure random key\n\n# Microsoft Entra ID (Azure AD) app registration info\nCLIENT_ID = 'your_client_id_here'\nCLIENT_SECRET = 'your_client_secret_here'\nTENANT_ID = 'your_tenant_id_here'\nAUTHORITY = f'https://login.microsoftonline.com/{TENANT_ID}'\nREDIRECT_PATH = '/getAToken'  # Redirect URI path\n\n# Scopes requested\nSCOPE = ['User.Read']\n\n# MSAL Confidential Client\nmsal_app = ConfidentialClientApplication(\n    CLIENT_ID, authority=AUTHORITY,\n    client_credential=CLIENT_SECRET\n)\n\n@app.route('/')\ndef index():\n    if 'user' in session:\n        return f\"Hello, {session['user']['name']}! <a href='/logout'>Logout</a>\"\n    else:\n        return \"<a href='/login'>Login with Microsoft Entra ID</a>\"\n\n# Run this file to check setup (no server run here)\nprint('Setup complete. Next, create the main app file.')",
+      "highlights": [
+        {
+          "lines": [
+            7,
+            11
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        },
+        {
+          "lines": [
+            16,
+            23
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        }
+      ]
+    },
+    {
+      "action": "run_command",
+      "command": "python 01_app_setup.py"
     },
     {
       "action": "pause",
-      "seconds": 1
+      "seconds": 3
     },
     {
       "action": "create_file",
-      "filename": "src/foundry_client.py",
-      "content": "import requests\n\n\ndef ask_agent(config: dict, prompt: str) -> dict:\n    url = f\"{config['endpoint'].rstrip('/')}/{config['agent_id']}/invoke\"\n    headers = {\n        \"Content-Type\": \"application/json\",\n        \"x-api-key\": config[\"api_key\"],\n    }\n    response = requests.post(url, headers=headers, json={\"input\": prompt}, timeout=30)\n    response.raise_for_status()\n    return response.json()\n"
+      "filename": "02_app_main.py",
+      "content": "from flask import Flask, redirect, url_for, session, request\nfrom msal import ConfidentialClientApplication\nimport uuid\n\napp = Flask(__name__)\napp.secret_key = 'your_secret_key_here'  # Replace with a secure random key\n\nCLIENT_ID = 'your_client_id_here'\nCLIENT_SECRET = 'your_client_secret_here'\nTENANT_ID = 'your_tenant_id_here'\nAUTHORITY = f'https://login.microsoftonline.com/{TENANT_ID}'\nREDIRECT_PATH = '/getAToken'\n\nSCOPE = ['User.Read']\n\nmsal_app = ConfidentialClientApplication(\n    CLIENT_ID, authority=AUTHORITY,\n    client_credential=CLIENT_SECRET\n)\n\n@app.route('/')\ndef index():\n    if 'user' in session:\n        return f\"Hello, {session['user']['name']}! <a href='/logout'>Logout</a>\"\n    else:\n        return \"<a href='/login'>Login with Microsoft Entra ID</a>\"\n\n@app.route('/login')\ndef login():\n    # Generate a random state to protect against CSRF\n    session['state'] = str(uuid.uuid4())\n    auth_url = msal_app.get_authorization_request_url(\n        scopes=SCOPE,\n        state=session['state'],\n        redirect_uri=url_for('authorized', _external=True)\n    )\n    print(f\"Redirecting user to login URL: {auth_url}\")\n    return redirect(auth_url)\n\n@app.route(REDIRECT_PATH)\ndef authorized():\n    # Check state parameter to prevent CSRF\n    if request.args.get('state') != session.get('state'):\n        return \"State mismatch. Possible CSRF attack.\", 400\n\n    if 'error' in request.args:\n        return f\"Error: {request.args['error_description']}\", 400\n\n    code = request.args.get('code')\n    if not code:\n        return \"No code found in request.\", 400\n\n    # Acquire token by authorization code\n    result = msal_app.acquire_token_by_authorization_code(\n        code,\n        scopes=SCOPE,\n        redirect_uri=url_for('authorized', _external=True)\n    )\n\n    if 'access_token' in result:\n        # Save user info in session\n        session['user'] = result.get('id_token_claims')\n        print(f\"User {session['user']['name']} logged in successfully.\")\n        return redirect(url_for('index'))\n    else:\n        error = result.get('error')\n        error_desc = result.get('error_description')\n        print(f\"Token acquisition failed: {error} - {error_desc}\")\n        return f\"Login failed: {error_desc}\", 400\n\n@app.route('/logout')\ndef logout():\n    session.clear()\n    return redirect(\n        f'https://login.microsoftonline.com/common/oauth2/v2.0/logout?post_logout_redirect_uri={url_for(\"index\", _external=True)}'\n    )\n\nif __name__ == '__main__':\n    print('Starting Flask app for Microsoft Entra ID authentication demo...')\n    app.run(debug=True)",
+      "highlights": [
+        {
+          "lines": [
+            21,
+            29
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        },
+        {
+          "lines": [
+            31,
+            58
+          ],
+          "style": "arrow",
+          "color": "#90EE9044"
+        }
+      ]
+    },
+    {
+      "action": "run_command",
+      "command": "python 02_app_main.py"
     },
     {
       "action": "pause",
-      "seconds": 1
-    },
-    {
-      "action": "create_file",
-      "filename": "src/main.py",
-      "content": "from dotenv import load_dotenv\n\nfrom config import get_foundry_config\nfrom foundry_client import ask_agent\n\n\nload_dotenv()\nconfig = get_foundry_config()\nresult = ask_agent(config, \"Summarize latest product updates in 3 bullets\")\nprint(result)\n"
-    },
-    {
-      "action": "pause",
-      "seconds": 2
+      "seconds": 5
     }
   ]
 }

@@ -8,7 +8,7 @@ try:
 except ModuleNotFoundError:  # pragma: no cover
     launch_agent_gui = None
 from .csharp_planner import plan_csharp_demo
-from .planner import plan_demo
+from .planner import normalize_plan_highlights, plan_demo
 from .pipeline_planner import plan_pipeline_demo
 from .player import play_demo
 from .recording_runner import (
@@ -20,6 +20,84 @@ from .recording_runner import (
     run_screenshot_play,
 )
 from .sql_planner import plan_sql_demo
+
+
+def _prompt_choice(prompt: str, choices: list[str], default: str) -> str:
+    options = "/".join(choices)
+    while True:
+        value = input(f"{prompt} [{options}] (default: {default}): ").strip().lower()
+        if not value:
+            return default
+        if value in choices:
+            return value
+        print(f"Invalid choice: {value}")
+
+
+def _launch_builtin_wizard() -> None:
+    print("Starting demo-helper native wizard...")
+    print("This fallback works without agent extensions.")
+
+    scenario_aliases = {
+        "python": "python",
+        "sql": "sql",
+        "sql-visual": "sql-visual",
+        "csharp": "csharp",
+        "azdo": "azdo",
+        "gha": "gha",
+    }
+
+    scenario = _prompt_choice(
+        "Scenario",
+        list(scenario_aliases.keys()),
+        default="python",
+    )
+
+    prompt = input("Describe the demo you want to create: ").strip()
+    if not prompt:
+        raise RuntimeError("Prompt is required.")
+
+    capture_mode = _prompt_choice(
+        "Output type",
+        ["screenshots", "mp4", "both"],
+        default="both",
+    )
+
+    video_format = "mp4"
+    if capture_mode in {"mp4", "both"}:
+        video_format = _prompt_choice(
+            "Video format",
+            ["mp4", "webm"],
+            default="mp4",
+        )
+
+    mode = _prompt_choice(
+        "Playback mode",
+        ["stable", "typing"],
+        default="stable",
+    )
+
+    plan_file, workspace_dir, recording_file, captures_dir = generate_and_capture(
+        scenario=scenario_aliases[scenario],
+        prompt=prompt,
+        capture_mode=capture_mode,
+        speed=0.03,
+        countdown=8,
+        video_format=video_format,
+        resolution="1920x1280",
+        mode=mode,
+        clean_view=False,
+        focus_lock=True,
+        plan_path=None,
+        video_file=None,
+        screenshots_dir=None,
+    )
+
+    print(f"Plan saved to: {plan_file}")
+    print(f"Playback workspace: {workspace_dir}")
+    if recording_file:
+        print(f"Recording saved to: {recording_file}")
+    if captures_dir:
+        print(f"Screenshots saved to: {captures_dir}")
 
 
 def main():
@@ -239,8 +317,8 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_play_p.add_argument(
-        "--capture", choices=["mp4", "screenshots", "both"], default="mp4",
-        help="Capture output type (default: mp4)",
+        "--capture", choices=["mp4", "screenshots", "both"], default="both",
+        help="Capture output type (default: both)",
     )
     record_play_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
@@ -297,8 +375,8 @@ def main():
         help="Seconds before playback starts (default: 8)",
     )
     record_run_p.add_argument(
-        "--capture", choices=["mp4", "screenshots", "both"], default="mp4",
-        help="Capture output type (default: mp4)",
+        "--capture", choices=["mp4", "screenshots", "both"], default="both",
+        help="Capture output type (default: both)",
     )
     record_run_p.add_argument(
         "--format", choices=["webm", "mp4"], default="mp4",
@@ -410,7 +488,7 @@ def main():
 
     if args.command == "plan":
         print(f'Planning demo for: "{args.description}"')
-        plan = plan_demo(args.description)
+        plan = normalize_plan_highlights(plan_demo(args.description))
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2)
         print(f"Plan saved to {args.output}")
@@ -419,7 +497,9 @@ def main():
 
     elif args.command == "sql-plan":
         print(f'Planning SQL demo for: "{args.description}"')
-        plan = plan_sql_demo(args.description, visual_only=args.visual_only)
+        plan = normalize_plan_highlights(
+            plan_sql_demo(args.description, visual_only=args.visual_only)
+        )
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2)
         print(f"SQL plan saved to {args.output}")
@@ -428,7 +508,7 @@ def main():
 
     elif args.command == "csharp-plan":
         print(f'Planning C# demo for: "{args.description}"')
-        plan = plan_csharp_demo(args.description)
+        plan = normalize_plan_highlights(plan_csharp_demo(args.description))
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2)
         print(f"C# plan saved to {args.output}")
@@ -437,7 +517,9 @@ def main():
 
     elif args.command == "azdo-plan":
         print(f'Planning Azure DevOps pipeline demo for: "{args.description}"')
-        plan = plan_pipeline_demo(args.description, pipeline_type="azure-devops")
+        plan = normalize_plan_highlights(
+            plan_pipeline_demo(args.description, pipeline_type="azure-devops")
+        )
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2)
         print(f"Azure DevOps plan saved to {args.output}")
@@ -446,7 +528,9 @@ def main():
 
     elif args.command == "gha-plan":
         print(f'Planning GitHub Actions demo for: "{args.description}"')
-        plan = plan_pipeline_demo(args.description, pipeline_type="github-actions")
+        plan = normalize_plan_highlights(
+            plan_pipeline_demo(args.description, pipeline_type="github-actions")
+        )
         with open(args.output, "w", encoding="utf-8") as f:
             json.dump(plan, f, indent=2)
         print(f"GitHub Actions plan saved to {args.output}")
@@ -460,7 +544,7 @@ def main():
 
     elif args.command == "run":
         print(f'Planning demo for: "{args.description}"')
-        plan = plan_demo(args.description)
+        plan = normalize_plan_highlights(plan_demo(args.description))
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -473,7 +557,9 @@ def main():
 
     elif args.command == "sql-run":
         print(f'Planning SQL demo for: "{args.description}"')
-        plan = plan_sql_demo(args.description, visual_only=args.visual_only)
+        plan = normalize_plan_highlights(
+            plan_sql_demo(args.description, visual_only=args.visual_only)
+        )
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -486,7 +572,7 @@ def main():
 
     elif args.command == "csharp-run":
         print(f'Planning C# demo for: "{args.description}"')
-        plan = plan_csharp_demo(args.description)
+        plan = normalize_plan_highlights(plan_csharp_demo(args.description))
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -499,7 +585,9 @@ def main():
 
     elif args.command == "azdo-run":
         print(f'Planning Azure DevOps pipeline demo for: "{args.description}"')
-        plan = plan_pipeline_demo(args.description, pipeline_type="azure-devops")
+        plan = normalize_plan_highlights(
+            plan_pipeline_demo(args.description, pipeline_type="azure-devops")
+        )
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -512,7 +600,9 @@ def main():
 
     elif args.command == "gha-run":
         print(f'Planning GitHub Actions demo for: "{args.description}"')
-        plan = plan_pipeline_demo(args.description, pipeline_type="github-actions")
+        plan = normalize_plan_highlights(
+            plan_pipeline_demo(args.description, pipeline_type="github-actions")
+        )
         print(f"  Title: {plan.get('title', 'Untitled')}")
         print(f"  Steps: {len(plan['steps'])}")
 
@@ -525,14 +615,13 @@ def main():
 
     elif args.command == "agent-ui":
         if launch_agent_gui is None:
-            raise RuntimeError(
-                "agent-ui is unavailable because demos_helper.agent_experience is missing."
-            )
-        launch_agent_gui()
+            _launch_builtin_wizard()
+        else:
+            launch_agent_gui()
 
     elif args.command == "record-play":
         with open(args.plan_file, encoding="utf-8") as f:
-            plan = json.load(f)
+            plan = normalize_plan_highlights(json.load(f))
 
         plan_path = Path(args.plan_file)
         scenario_name = plan_path.stem
@@ -583,7 +672,7 @@ def main():
 
     elif args.command == "screenshot-play":
         with open(args.plan_file, encoding="utf-8") as f:
-            plan = json.load(f)
+            plan = normalize_plan_highlights(json.load(f))
 
         plan_path = Path(args.plan_file)
         scenario_name = plan_path.stem

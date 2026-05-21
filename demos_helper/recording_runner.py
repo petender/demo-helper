@@ -13,7 +13,7 @@ from ctypes import wintypes
 
 from .csharp_planner import plan_csharp_demo
 from .pipeline_planner import plan_pipeline_demo
-from .planner import plan_demo
+from .planner import normalize_plan_highlights, plan_demo
 from .player import play_demo
 from .sql_planner import plan_sql_demo
 
@@ -64,17 +64,21 @@ def _sanitize_for_filename(name: str) -> str:
 
 def build_plan_for_scenario(scenario: str, prompt: str) -> Dict:
     if scenario == "python":
-        return plan_demo(prompt)
+        return normalize_plan_highlights(plan_demo(prompt))
     if scenario == "sql":
-        return plan_sql_demo(prompt, visual_only=False)
+        return normalize_plan_highlights(plan_sql_demo(prompt, visual_only=False))
     if scenario == "sql-visual":
-        return plan_sql_demo(prompt, visual_only=True)
+        return normalize_plan_highlights(plan_sql_demo(prompt, visual_only=True))
     if scenario == "csharp":
-        return plan_csharp_demo(prompt)
+        return normalize_plan_highlights(plan_csharp_demo(prompt))
     if scenario == "azdo":
-        return plan_pipeline_demo(prompt, pipeline_type="azure-devops")
+        return normalize_plan_highlights(
+            plan_pipeline_demo(prompt, pipeline_type="azure-devops")
+        )
     if scenario == "gha":
-        return plan_pipeline_demo(prompt, pipeline_type="github-actions")
+        return normalize_plan_highlights(
+            plan_pipeline_demo(prompt, pipeline_type="github-actions")
+        )
 
     raise ValueError(f"Unsupported scenario: {scenario}")
 
@@ -116,7 +120,17 @@ def _clear_highlights(workspace_dir: Path) -> None:
 
 def _apply_step_highlights(workspace_dir: Path, step: dict) -> None:
     """Apply highlights defined in a plan step, if any."""
-    highlights = step.get("highlights")
+    normalized_step = normalize_plan_highlights(
+        {
+            "steps": [
+                {
+                    "action": step.get("action"),
+                    "highlights": step.get("highlights"),
+                }
+            ]
+        }
+    )["steps"][0]
+    highlights = normalized_step.get("highlights")
     if highlights:
         _write_highlights(workspace_dir, highlights)
     else:
@@ -472,14 +486,54 @@ def _check_abort() -> None:
         raise KeyboardInterrupt("Playback aborted by ESC key")
 
 
-def _open_file_in_vscode(file_path: Path) -> None:
+def _open_file_in_vscode(file_path: Path, line: int = 1, column: int = 1) -> None:
     code_path = _ensure_tool("code")
+    line = max(1, int(line))
+    column = max(1, int(column))
     subprocess.run(
-        [code_path, "-r", "-g", f"{file_path}:1"],
+        [code_path, "-r", "-g", f"{file_path}:{line}:{column}"],
         check=False,
         stdout=subprocess.DEVNULL,
         stderr=subprocess.DEVNULL,
     )
+
+
+def _resolve_open_position(step: dict) -> Tuple[int, int]:
+    """Pick where to open the file for viewport-aware screenshots.
+
+    Priority:
+    1) explicit open_line/open_column from plan
+    2) first highlight start line
+    3) default line 1, column 1
+    """
+    line = step.get("open_line")
+    col = step.get("open_column")
+
+    if line is None:
+        highlights = step.get("highlights")
+        if isinstance(highlights, list):
+            for entry in highlights:
+                if not isinstance(entry, dict):
+                    continue
+                lines = entry.get("lines")
+                if isinstance(lines, list) and len(lines) == 2:
+                    try:
+                        line = int(lines[0])
+                        break
+                    except (TypeError, ValueError):
+                        continue
+
+    try:
+        line_num = max(1, int(line)) if line is not None else 1
+    except (TypeError, ValueError):
+        line_num = 1
+
+    try:
+        col_num = max(1, int(col)) if col is not None else 1
+    except (TypeError, ValueError):
+        col_num = 1
+
+    return line_num, col_num
 
 
 def _wait_for_editor(workspace_dir: Path, filename: str, timeout: float = 20.0) -> bool:
@@ -509,7 +563,7 @@ def _warmup_vscode_editor(workspace_dir: Path) -> None:
     """
     warmup_file = workspace_dir / ".vscode" / "warmup.txt"
     warmup_file.write_text("# warm-up\n", encoding="utf-8")
-    _open_file_in_vscode(warmup_file)
+    _open_file_in_vscode(warmup_file, line=1, column=1)
     _wait_for_editor(workspace_dir, "warmup.txt")
     time.sleep(1.0)
 
@@ -536,7 +590,8 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
-            _open_file_in_vscode(target)
+            open_line, open_col = _resolve_open_position(step)
+            _open_file_in_vscode(target, line=open_line, column=open_col)
             _wait_for_editor(workspace_dir, target.name)
             time.sleep(2.0)  # Let VS Code settle after confirmed open
             _apply_step_highlights(workspace_dir, step)
@@ -595,7 +650,8 @@ def _run_plan_stable_with_hook(
             target.parent.mkdir(parents=True, exist_ok=True)
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
-            _open_file_in_vscode(target)
+            open_line, open_col = _resolve_open_position(step)
+            _open_file_in_vscode(target, line=open_line, column=open_col)
             _wait_for_editor(workspace_dir, target.name)
             time.sleep(2.0)  # Let VS Code settle after confirmed open
             _apply_step_highlights(workspace_dir, step)

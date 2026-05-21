@@ -21,6 +21,21 @@ interface HighlightEntry {
 let activeDecorations: vscode.TextEditorDecorationType[] = [];
 let fileWatcher: vscode.FileSystemWatcher | undefined;
 let lastHighlightsContent = "";
+let reapplyTimeout: NodeJS.Timeout | undefined;
+let reapplyTimeout2: NodeJS.Timeout | undefined;
+
+function scheduleReapply(context: vscode.ExtensionContext) {
+  if (reapplyTimeout) { clearTimeout(reapplyTimeout); }
+  if (reapplyTimeout2) { clearTimeout(reapplyTimeout2); }
+  reapplyTimeout = setTimeout(() => {
+    lastHighlightsContent = "";
+    applyHighlights(context);
+  }, 500);
+  reapplyTimeout2 = setTimeout(() => {
+    lastHighlightsContent = "";
+    applyHighlights(context);
+  }, 1500);
+}
 
 export function activate(context: vscode.ExtensionContext) {
   const workspaceFolder = vscode.workspace.workspaceFolders?.[0];
@@ -36,8 +51,8 @@ export function activate(context: vscode.ExtensionContext) {
   const pattern = new vscode.RelativePattern(workspaceFolder, HIGHLIGHTS_FILENAME);
 
   fileWatcher = vscode.workspace.createFileSystemWatcher(pattern);
-  fileWatcher.onDidChange(() => { log(workspaceFolder, "FileWatcher: onDidChange"); lastHighlightsContent = ""; applyHighlights(context); });
-  fileWatcher.onDidCreate(() => { log(workspaceFolder, "FileWatcher: onDidCreate"); lastHighlightsContent = ""; applyHighlights(context); });
+  fileWatcher.onDidChange(() => { log(workspaceFolder, "FileWatcher: onDidChange"); lastHighlightsContent = ""; applyHighlights(context); scheduleReapply(context); });
+  fileWatcher.onDidCreate(() => { log(workspaceFolder, "FileWatcher: onDidCreate"); lastHighlightsContent = ""; applyHighlights(context); scheduleReapply(context); });
   fileWatcher.onDidDelete(() => { log(workspaceFolder, "FileWatcher: onDidDelete"); lastHighlightsContent = ""; clearAllDecorations(); });
 
   // Re-apply highlights whenever the active editor changes (backup trigger)
@@ -45,6 +60,19 @@ export function activate(context: vscode.ExtensionContext) {
     log(workspaceFolder, "EditorChange: " + (editor?.document.uri.fsPath ?? "null"));
     lastHighlightsContent = ""; // Force re-read on editor change
     applyHighlights(context);
+    scheduleReapply(context); // Re-apply after 1s when editor is fully rendered
+  });
+
+  // Re-apply when visible ranges change — fires when editor viewport is first laid out
+  // This is critical for the first editor in a new window where setDecorations is a no-op until layout
+  let visibleRangesTimeout: NodeJS.Timeout | undefined;
+  const visibleRangesListener = vscode.window.onDidChangeTextEditorVisibleRanges((e) => {
+    if (visibleRangesTimeout) { clearTimeout(visibleRangesTimeout); }
+    visibleRangesTimeout = setTimeout(() => {
+      log(workspaceFolder, "VisibleRanges: " + e.textEditor.document.uri.fsPath);
+      lastHighlightsContent = "";
+      applyHighlights(context);
+    }, 100);
   });
 
   // Poll for highlight file changes every 500ms as a reliable fallback
@@ -54,6 +82,7 @@ export function activate(context: vscode.ExtensionContext) {
 
   context.subscriptions.push(fileWatcher);
   context.subscriptions.push(editorListener);
+  context.subscriptions.push(visibleRangesListener);
   context.subscriptions.push({ dispose: () => clearInterval(pollInterval) });
   context.subscriptions.push(
     vscode.commands.registerCommand("demoHighlight.clear", clearAllDecorations)

@@ -482,6 +482,38 @@ def _open_file_in_vscode(file_path: Path) -> None:
     )
 
 
+def _wait_for_editor(workspace_dir: Path, filename: str, timeout: float = 20.0) -> bool:
+    """Poll the extension log until VS Code confirms the file is active."""
+    log_file = workspace_dir / ".demo-highlight-log.txt"
+    start = time.time()
+    while time.time() - start < timeout:
+        if log_file.exists():
+            try:
+                content = log_file.read_text(encoding="utf-8")
+                for line in reversed(content.splitlines()):
+                    if "EditorChange:" in line and filename in line:
+                        return True
+            except OSError:
+                pass
+        time.sleep(0.3)
+    return False
+
+
+def _warmup_vscode_editor(workspace_dir: Path) -> None:
+    """Open a dummy file to warm up VS Code's editor rendering pipeline.
+
+    The very first editor tab opened in a new VS Code window has a rendering
+    bug where setDecorations calls don't visually paint. Opening a throwaway
+    file first and waiting for VS Code to confirm it's active ensures the
+    rendering pipeline is initialized.
+    """
+    warmup_file = workspace_dir / ".vscode" / "warmup.txt"
+    warmup_file.write_text("# warm-up\n", encoding="utf-8")
+    _open_file_in_vscode(warmup_file)
+    _wait_for_editor(workspace_dir, "warmup.txt")
+    time.sleep(1.0)
+
+
 def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
     steps = plan.get("steps", [])
     print(f"\nDemo: {plan.get('title', 'Untitled')}")
@@ -490,6 +522,8 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
 
     output_dir = workspace_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
+
+    _warmup_vscode_editor(workspace_dir)
 
     for idx, step in enumerate(steps, 1):
         _check_abort()
@@ -503,9 +537,12 @@ def _run_plan_stable(plan: Dict, workspace_dir: Path, title_hint: str) -> None:
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
             _open_file_in_vscode(target)
-            time.sleep(1.0)  # Wait for editor to become active
+            _wait_for_editor(workspace_dir, target.name)
+            time.sleep(2.0)  # Let VS Code settle after confirmed open
             _apply_step_highlights(workspace_dir, step)
             time.sleep(1.5)  # Wait for extension to render highlights
+            _apply_step_highlights(workspace_dir, step)  # Re-trigger file watcher
+            time.sleep(0.5)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
@@ -545,6 +582,8 @@ def _run_plan_stable_with_hook(
     output_dir = workspace_dir / "output"
     output_dir.mkdir(parents=True, exist_ok=True)
 
+    _warmup_vscode_editor(workspace_dir)
+
     for idx, step in enumerate(steps, 1):
         _check_abort()
         _activate_vscode_window(title_hint)
@@ -557,9 +596,12 @@ def _run_plan_stable_with_hook(
             target.write_text(step.get("content", ""), encoding="utf-8")
             print(f"[{idx}/{len(steps)}] create_file  {rel_name}")
             _open_file_in_vscode(target)
-            time.sleep(1.0)  # Wait for editor to become active
+            _wait_for_editor(workspace_dir, target.name)
+            time.sleep(2.0)  # Let VS Code settle after confirmed open
             _apply_step_highlights(workspace_dir, step)
             time.sleep(1.5)  # Wait for extension to render highlights
+            _apply_step_highlights(workspace_dir, step)  # Re-trigger file watcher
+            time.sleep(0.5)
         elif action == "run_command":
             command = step.get("command", "")
             print(f"[{idx}/{len(steps)}] run_command   {command}")
